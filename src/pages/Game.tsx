@@ -48,18 +48,22 @@ const Game: React.FC = () => {
   };
 
   const handleRoundComplete = (newStrokes: Stroke[]) => {
+    // Save the complete round's strokes
     setStrokes(newStrokes);
     
     if (config && currentRound < config.roundCount) {
       // Start next round
       setCurrentRound(currentRound + 1);
       
-      // Reset drawing canvas by clearing strokes
-      // and returning to the first player for the next round
+      // Return to the first player for the next round by not passing any strokes
+      // The DrawingCanvas will start with player 0 when no previous strokes exist
       toast({
         title: "Round complete!",
         description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
       });
+      
+      // Clear strokes to ensure we start fresh with player 1 again
+      setStrokes([]);
     } else {
       // All rounds complete, move to voting
       setGamePhase('voting');
@@ -140,6 +144,7 @@ const Game: React.FC = () => {
         <Voting
           players={players}
           secretWord={secretWord}
+          strokes={strokes}
           onVotingComplete={handleVotingComplete}
         />
       )}

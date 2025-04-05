@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,7 +107,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   }, [strokes, currentPlayerStrokes, currentStroke, canvasSize]);
 
-  // Handle resizing
   useEffect(() => {
     const updateCanvasSize = () => {
       const container = document.querySelector('.canvas-container');
@@ -229,7 +227,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         <div className="mb-4 flex justify-between items-center">
           <div>
             <span className="font-medium">Round {currentRound} of {totalRounds}</span>
-            <p className="text-sm text-muted-foreground">Word: {secretWord}</p>
+            {!currentPlayer.isImposter && (
+              <p className="text-sm text-muted-foreground">Word: {secretWord}</p>
+            )}
           </div>
           <div className="flex items-center">
             <div 

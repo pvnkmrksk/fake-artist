@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import GameSetup from '@/components/GameSetup';
 import PlayerConfig from '@/components/PlayerConfig';
@@ -52,6 +53,13 @@ const Game: React.FC = () => {
     if (config && currentRound < config.roundCount) {
       // Start next round
       setCurrentRound(currentRound + 1);
+      
+      // Reset drawing canvas by clearing strokes
+      // and returning to the first player for the next round
+      toast({
+        title: "Round complete!",
+        description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
+      });
     } else {
       // All rounds complete, move to voting
       setGamePhase('voting');

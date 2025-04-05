@@ -38,6 +38,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
+  const [currentPlayerStrokes, setCurrentPlayerStrokes] = useState<Stroke[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
   const { toast } = useToast();
 
@@ -72,6 +73,24 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
     });
 
+    // Draw current player's strokes
+    currentPlayerStrokes.forEach(stroke => {
+      if (stroke.points.length > 0) {
+        context.beginPath();
+        context.moveTo(stroke.points[0].x, stroke.points[0].y);
+        
+        stroke.points.forEach((point, i) => {
+          if (i > 0) context.lineTo(point.x, point.y);
+        });
+        
+        context.strokeStyle = stroke.color;
+        context.lineWidth = stroke.width;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.stroke();
+      }
+    });
+
     // If there's a current stroke being drawn, draw it too
     if (currentStroke && currentStroke.points.length > 0) {
       context.beginPath();
@@ -87,7 +106,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       context.lineJoin = 'round';
       context.stroke();
     }
-  }, [strokes, currentStroke, canvasSize]);
+  }, [strokes, currentPlayerStrokes, currentStroke, canvasSize]);
 
   // Handle resizing
   useEffect(() => {
@@ -129,6 +148,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const startDrawing = (e: React.TouchEvent | React.MouseEvent) => {
+    if (currentPlayerStrokes.length > 0) {
+      // Player has already drawn a stroke, don't allow starting a new one
+      return;
+    }
+    
     const point = getCanvasCoordinates(e);
     
     setIsDrawing(true);
@@ -152,20 +176,28 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const endDrawing = () => {
+    if (!isDrawing || !currentStroke) {
+      setIsDrawing(false);
+      return;
+    }
+    
     setIsDrawing(false);
-    if (currentStroke && currentStroke.points.length > 1) {
+    if (currentStroke.points.length > 1) {
       // Only save if there are at least 2 points (a visible line)
-      setStrokes([...strokes, currentStroke]);
+      setCurrentPlayerStrokes([...currentPlayerStrokes, currentStroke]);
     }
     setCurrentStroke(null);
   };
 
   const handleUndo = () => {
+    // Clear all strokes for the current player
+    setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
+    setIsDrawing(false);
   };
 
   const handleConfirmStroke = () => {
-    if (!currentStroke || currentStroke.points.length <= 1) {
+    if (currentPlayerStrokes.length === 0) {
       toast({
         title: "Can't continue",
         description: "You need to draw something first!",
@@ -174,8 +206,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
     
-    const updatedStrokes = [...strokes, currentStroke];
+    // Add all of the current player's strokes to the main strokes array
+    const updatedStrokes = [...strokes, ...currentPlayerStrokes];
     setStrokes(updatedStrokes);
+    
+    // Reset the current player's strokes
+    setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     
     // Advance to the next player or end the round
@@ -196,7 +232,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             <p className="text-sm text-muted-foreground">Word: {secretWord}</p>
           </div>
           <div className="flex items-center">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-xs player-color-${currentPlayer.colorIndex}`}>
+            <div 
+              className="h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
+              style={{ backgroundColor: getPlayerColor(currentPlayer.colorIndex) }}
+            >
               {currentPlayerIndex + 1}
             </div>
             <span className="ml-2 font-medium">{currentPlayer.name}'s turn</span>
@@ -223,7 +262,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           <Button
             variant="outline"
             onClick={handleUndo}
-            disabled={!currentStroke || currentStroke.points.length <= 1}
+            disabled={currentPlayerStrokes.length === 0 && !currentStroke}
           >
             <Undo2 className="h-4 w-4 mr-2" />
             Undo

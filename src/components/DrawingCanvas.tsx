@@ -54,6 +54,23 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
     
+    // Reset strokes for the new round
+    setStrokes([]);
+    setCurrentPlayerStrokes([]);
+    setCurrentStroke(null);
+  }, [currentRound]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    
+    // Clear canvas
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
     // Draw all previous strokes
     strokes.forEach(stroke => {
       if (stroke.points.length > 0) {

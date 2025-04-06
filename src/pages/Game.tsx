@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import GameSetup from '@/components/GameSetup';
 import PlayerConfig from '@/components/PlayerConfig';
@@ -48,24 +47,24 @@ const Game: React.FC = () => {
   };
 
   const handleRoundComplete = (newStrokes: Stroke[]) => {
-    // Save the complete round's strokes
-    setStrokes(newStrokes);
+    // Save the complete round's strokes by combining with existing strokes
+    const updatedStrokes = [...strokes, ...newStrokes];
     
     if (config && currentRound < config.roundCount) {
       // Start next round
       setCurrentRound(currentRound + 1);
+      setStrokes(updatedStrokes); // Keep all strokes for the final display
       
-      // Return to the first player for the next round by not passing any strokes
-      // The DrawingCanvas will start with player 0 when no previous strokes exist
       toast({
         title: "Round complete!",
         description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
       });
       
-      // Clear strokes to ensure we start fresh with player 1 again
-      setStrokes([]);
+      // We keep the strokes but signal to the DrawingCanvas to reset its player index
+      // by passing a new key with the current round
     } else {
       // All rounds complete, move to voting
+      setStrokes(updatedStrokes);
       setGamePhase('voting');
     }
   };
@@ -132,6 +131,7 @@ const Game: React.FC = () => {
       
       {gamePhase === 'drawing' && config && (
         <DrawingCanvas
+          key={`drawing-round-${currentRound}`} // Add a key prop to force re-render with each round
           players={players}
           currentRound={currentRound}
           totalRounds={config.roundCount}

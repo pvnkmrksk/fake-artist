@@ -1,9 +1,12 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Player, Stroke } from '@/types/game';
+import { Card } from "@/components/ui/card";
+import { Player, Stroke, DrawingAction } from '@/types/game';
 import { Undo2, Check, ArrowRight } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
+import { useSocket } from "@/contexts/SocketContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface DrawingCanvasProps {
   players: Player[];
@@ -12,6 +15,7 @@ interface DrawingCanvasProps {
   secretWord: string;
   previousStrokes?: Stroke[];
   onRoundComplete: (strokes: Stroke[]) => void;
+  isMultiplayer?: boolean;
 }
 
 const STROKE_WIDTH = 4;
@@ -32,7 +36,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   totalRounds,
   secretWord,
   previousStrokes = [],
-  onRoundComplete 
+  onRoundComplete,
+  isMultiplayer = false
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -41,10 +46,36 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [currentPlayerStrokes, setCurrentPlayerStrokes] = useState<Stroke[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
+  const { socket, roomId } = useSocket();
   const { toast } = useToast();
-
+  const isMobile = useIsMobile();
+  
   const currentPlayer = players[currentPlayerIndex];
+  
+  // Set up responsiveness based on container size
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      const container = document.querySelector('.canvas-container');
+      if (container) {
+        // For desktop, use a max width
+        // For mobile, use full width minus padding
+        const width = isMobile 
+          ? Math.min(window.innerWidth - 40, CANVAS_WIDTH)
+          : Math.min(container.clientWidth - 20, CANVAS_WIDTH);
+          
+        setCanvasSize({
+          width,
+          height: width // Keep it square
+        });
+      }
+    };
 
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+    return () => window.removeEventListener('resize', updateCanvasSize);
+  }, [isMobile]);
+
+  // Reset canvas and state for new round
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -58,22 +89,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
     // Draw all previous strokes from past rounds
     if (previousStrokes && previousStrokes.length > 0) {
-      previousStrokes.forEach(stroke => {
-        if (stroke.points.length > 0) {
-          context.beginPath();
-          context.moveTo(stroke.points[0].x, stroke.points[0].y);
-          
-          stroke.points.forEach((point, i) => {
-            if (i > 0) context.lineTo(point.x, point.y);
-          });
-          
-          context.strokeStyle = stroke.color;
-          context.lineWidth = stroke.width;
-          context.lineCap = 'round';
-          context.lineJoin = 'round';
-          context.stroke();
-        }
-      });
+      drawStrokes(context, previousStrokes);
     }
     
     // Reset player index to start with first player in each round
@@ -85,107 +101,119 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setCurrentStroke(null);
   }, [currentRound, previousStrokes]);
 
+  // Set up multiplayer drawing socket listeners
   useEffect(() => {
+    if (!socket || !isMultiplayer) return;
+    
+    const handleRemoteDrawingAction = (action: DrawingAction) => {
+      // Only process drawing actions if it's not from the current player
+      const playerObj = players.find(p => p.id === action.playerId);
+      if (!playerObj) return;
+      
+      if (action.type === 'start' && action.point) {
+        // Start a new stroke for the remote player
+        const newStroke: Stroke = {
+          points: [action.point],
+          color: action.color,
+          width: STROKE_WIDTH,
+          playerId: action.playerId
+        };
+        
+        setStrokes(prev => [...prev, newStroke]);
+        redrawCanvas([...strokes, newStroke]);
+      } 
+      else if (action.type === 'move' && action.point) {
+        // Find the most recent stroke for this player and add a point
+        setStrokes(prev => {
+          const playerStrokes = prev.filter(s => s.playerId === action.playerId);
+          if (playerStrokes.length === 0) return prev;
+          
+          const lastStrokeIndex = prev.findIndex(s => 
+            s.playerId === action.playerId && 
+            prev.lastIndexOf(s) === prev.findIndex(s2 => 
+              s2.playerId === action.playerId && 
+              prev.lastIndexOf(s2) === prev.lastIndexOf(s)
+            )
+          );
+          
+          if (lastStrokeIndex === -1 || !action.point) return prev;
+          
+          const updatedStrokes = [...prev];
+          updatedStrokes[lastStrokeIndex] = {
+            ...updatedStrokes[lastStrokeIndex],
+            points: [...updatedStrokes[lastStrokeIndex].points, action.point]
+          };
+          
+          // Redraw with updated strokes
+          redrawCanvas(updatedStrokes);
+          
+          return updatedStrokes;
+        });
+      }
+    };
+    
+    socket.on('drawing-action', handleRemoteDrawingAction);
+    
+    return () => {
+      socket.off('drawing-action', handleRemoteDrawingAction);
+    };
+  }, [socket, isMultiplayer, players, strokes]);
+
+  // Redraw the canvas with current state
+  const redrawCanvas = (allStrokes: Stroke[]) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Clear canvas and redraw everything
+    // Clear canvas
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
     
     // Draw all previous strokes from past rounds
     if (previousStrokes && previousStrokes.length > 0) {
-      previousStrokes.forEach(stroke => {
-        if (stroke.points.length > 0) {
-          context.beginPath();
-          context.moveTo(stroke.points[0].x, stroke.points[0].y);
-          
-          stroke.points.forEach((point, i) => {
-            if (i > 0) context.lineTo(point.x, point.y);
-          });
-          
-          context.strokeStyle = stroke.color;
-          context.lineWidth = stroke.width;
-          context.lineCap = 'round';
-          context.lineJoin = 'round';
-          context.stroke();
-        }
-      });
+      drawStrokes(context, previousStrokes);
     }
     
-    // Draw current round's strokes
-    strokes.forEach(stroke => {
-      if (stroke.points.length > 0) {
-        context.beginPath();
-        context.moveTo(stroke.points[0].x, stroke.points[0].y);
-        
-        stroke.points.forEach((point, i) => {
-          if (i > 0) context.lineTo(point.x, point.y);
-        });
-        
-        context.strokeStyle = stroke.color;
-        context.lineWidth = stroke.width;
-        context.lineCap = 'round';
-        context.lineJoin = 'round';
-        context.stroke();
-      }
-    });
-
-    // Draw current player's strokes
-    currentPlayerStrokes.forEach(stroke => {
-      if (stroke.points.length > 0) {
-        context.beginPath();
-        context.moveTo(stroke.points[0].x, stroke.points[0].y);
-        
-        stroke.points.forEach((point, i) => {
-          if (i > 0) context.lineTo(point.x, point.y);
-        });
-        
-        context.strokeStyle = stroke.color;
-        context.lineWidth = stroke.width;
-        context.lineCap = 'round';
-        context.lineJoin = 'round';
-        context.stroke();
-      }
-    });
-
-    // If there's a current stroke being drawn, draw it too
+    // Draw current round strokes
+    drawStrokes(context, allStrokes);
+    
+    // Draw current player strokes
+    drawStrokes(context, currentPlayerStrokes);
+    
+    // Draw current stroke being created
     if (currentStroke && currentStroke.points.length > 0) {
-      context.beginPath();
-      context.moveTo(currentStroke.points[0].x, currentStroke.points[0].y);
-      
-      currentStroke.points.forEach((point, i) => {
-        if (i > 0) context.lineTo(point.x, point.y);
-      });
-      
-      context.strokeStyle = currentStroke.color;
-      context.lineWidth = currentStroke.width;
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      context.stroke();
+      drawStroke(context, currentStroke);
     }
-  }, [strokes, currentPlayerStrokes, currentStroke, canvasSize, previousStrokes]);
-
-  useEffect(() => {
-    const updateCanvasSize = () => {
-      const container = document.querySelector('.canvas-container');
-      if (container) {
-        const width = Math.min(container.clientWidth - 20, CANVAS_WIDTH);
-        setCanvasSize({
-          width,
-          height: width // Keep it square
-        });
+  };
+  
+  // Helper to draw multiple strokes
+  const drawStrokes = (context: CanvasRenderingContext2D, strokesArray: Stroke[]) => {
+    strokesArray.forEach(stroke => {
+      if (stroke.points.length > 0) {
+        drawStroke(context, stroke);
       }
-    };
+    });
+  };
+  
+  // Helper to draw a single stroke
+  const drawStroke = (context: CanvasRenderingContext2D, stroke: Stroke) => {
+    context.beginPath();
+    context.moveTo(stroke.points[0].x, stroke.points[0].y);
+    
+    stroke.points.forEach((point, i) => {
+      if (i > 0) context.lineTo(point.x, point.y);
+    });
+    
+    context.strokeStyle = stroke.color;
+    context.lineWidth = stroke.width;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.stroke();
+  };
 
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
-    return () => window.removeEventListener('resize', updateCanvasSize);
-  }, []);
-
+  // Event handlers for drawing
   const getCanvasCoordinates = (e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -216,12 +244,25 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const point = getCanvasCoordinates(e);
     
     setIsDrawing(true);
-    setCurrentStroke({
+    const newStroke: Stroke = {
       points: [point],
       color: getPlayerColor(currentPlayer.colorIndex),
       width: STROKE_WIDTH,
       playerId: currentPlayer.id
-    });
+    };
+    
+    setCurrentStroke(newStroke);
+    
+    // Send drawing action to other players if in multiplayer mode
+    if (isMultiplayer && socket && roomId) {
+      socket.emit('drawing-action', {
+        type: 'start',
+        point,
+        playerId: currentPlayer.id,
+        color: getPlayerColor(currentPlayer.colorIndex),
+        roomId
+      });
+    }
   };
 
   const draw = (e: React.TouchEvent | React.MouseEvent) => {
@@ -229,9 +270,33 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     const point = getCanvasCoordinates(e);
     
-    setCurrentStroke({
-      ...currentStroke,
-      points: [...currentStroke.points, point]
+    setCurrentStroke(prevStroke => {
+      if (!prevStroke) return null;
+      
+      const updatedStroke = {
+        ...prevStroke,
+        points: [...prevStroke.points, point]
+      };
+      
+      // Redraw with updated stroke
+      redrawCanvas(strokes);
+      drawStroke(
+        canvasRef.current?.getContext('2d') as CanvasRenderingContext2D, 
+        updatedStroke
+      );
+      
+      // Send drawing action to other players if in multiplayer mode
+      if (isMultiplayer && socket && roomId) {
+        socket.emit('drawing-action', {
+          type: 'move',
+          point,
+          playerId: currentPlayer.id,
+          color: getPlayerColor(currentPlayer.colorIndex),
+          roomId
+        });
+      }
+      
+      return updatedStroke;
     });
   };
 
@@ -246,6 +311,16 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       // Only save if there are at least 2 points (a visible line)
       setCurrentPlayerStrokes([...currentPlayerStrokes, currentStroke]);
     }
+    
+    // Send drawing action to other players if in multiplayer mode
+    if (isMultiplayer && socket && roomId) {
+      socket.emit('drawing-action', {
+        type: 'end',
+        playerId: currentPlayer.id,
+        roomId
+      });
+    }
+    
     setCurrentStroke(null);
   };
 
@@ -254,6 +329,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     setIsDrawing(false);
+    
+    // Redraw canvas without current player's strokes
+    redrawCanvas(strokes);
   };
 
   const handleConfirmStroke = () => {
@@ -273,6 +351,15 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     // Reset the current player's strokes
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
+    
+    // Notify other players in multiplayer mode
+    if (isMultiplayer && socket && roomId) {
+      socket.emit('player-turn-complete', {
+        playerId: currentPlayer.id,
+        strokes: currentPlayerStrokes,
+        roomId
+      });
+    }
     
     // Advance to the next player or end the round
     if (currentPlayerIndex < players.length - 1) {
@@ -301,6 +388,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
               {currentPlayerIndex + 1}
             </div>
             <span className="ml-2 font-medium">{currentPlayer.name}'s turn</span>
+            {currentPlayer.isOnline && (
+              <span className="ml-2 h-2 w-2 rounded-full bg-green-500" title="Online"></span>
+            )}
           </div>
         </div>
         
@@ -317,6 +407,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             onTouchStart={startDrawing}
             onTouchMove={draw}
             onTouchEnd={endDrawing}
+            style={{
+              width: `${canvasSize.width}px`,
+              height: `${canvasSize.height}px`
+            }}
           />
         </div>
         

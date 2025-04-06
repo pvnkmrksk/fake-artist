@@ -1,5 +1,6 @@
 
 import Game from './Game';
+import { SocketProvider } from '@/contexts/SocketContext';
 
 const Index = () => {
   return (

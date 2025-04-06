@@ -1,73 +1,46 @@
-# Welcome to your Lovable project
 
-## Project info
+# Sogu (ಸೋಗು) - A Social Deduction Drawing Game
 
-**URL**: https://lovable.dev/projects/ca9f1dbb-5429-47ff-bef5-31ddc0a23187
+Sogu, meaning "impostor" in Kannada, is a fun social deduction drawing game where players take turns creating art while one player - the impostor - tries to blend in without knowing the secret word.
 
-## How can I edit this code?
+## How To Play
 
-There are several ways of editing your application.
+1. **Setup Phase**: Configure the game by setting the number of rounds and players.
+2. **Player Configuration**: Enter player names - one player will be randomly assigned as the impostor.
+3. **Word Reveal**: All players except the impostor are shown the secret word.
+4. **Drawing Phase**: Players take turns adding to a collective drawing based on the secret word. The impostor must pretend to know the word.
+5. **Voting Phase**: Players vote on who they think is the impostor.
+6. **Results**: Find out if the group identified the impostor correctly!
 
-**Use Lovable**
+## Game Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ca9f1dbb-5429-47ff-bef5-31ddc0a23187) and start prompting.
+- Collaborative drawing with each player taking turns
+- Progressive drawing that maintains history across rounds
+- Interactive voting system
+- Dynamic player management
+- Responsive design for different screen sizes
 
-Changes made via Lovable will be committed automatically to this repo.
+## Technical Details
 
-**Use your preferred IDE**
+This game is built using:
+- React with TypeScript
+- Tailwind CSS for styling
+- Shadcn UI component library
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Contributing
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Interested in contributing? Here's how:
 
-Follow these steps:
+1. Fork the repository
+2. Create your feature branch: `git checkout -b my-new-feature`
+3. Commit your changes: `git commit -am 'Add some feature'`
+4. Push to the branch: `git push origin my-new-feature`
+5. Submit a pull request
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## License
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+This project is open source and available under the MIT License.
 
-# Step 3: Install the necessary dependencies.
-npm i
+## About the Name
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/ca9f1dbb-5429-47ff-bef5-31ddc0a23187) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes it is!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+"Sogu" (ಸೋಗು) is a Kannada word meaning "impostor" or "pretender" - perfectly capturing the essence of this social deduction game where one player must blend in without knowing the secret.

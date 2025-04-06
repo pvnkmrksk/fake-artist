@@ -10,6 +10,7 @@ interface DrawingCanvasProps {
   currentRound: number;
   totalRounds: number;
   secretWord: string;
+  previousStrokes?: Stroke[];
   onRoundComplete: (strokes: Stroke[]) => void;
 }
 
@@ -29,7 +30,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   players, 
   currentRound, 
   totalRounds,
-  secretWord, 
+  secretWord,
+  previousStrokes = [],
   onRoundComplete 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,15 +52,38 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Clear canvas
+    // Clear canvas first
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw all previous strokes from past rounds
+    if (previousStrokes && previousStrokes.length > 0) {
+      previousStrokes.forEach(stroke => {
+        if (stroke.points.length > 0) {
+          context.beginPath();
+          context.moveTo(stroke.points[0].x, stroke.points[0].y);
+          
+          stroke.points.forEach((point, i) => {
+            if (i > 0) context.lineTo(point.x, point.y);
+          });
+          
+          context.strokeStyle = stroke.color;
+          context.lineWidth = stroke.width;
+          context.lineCap = 'round';
+          context.lineJoin = 'round';
+          context.stroke();
+        }
+      });
+    }
     
-    // Reset strokes for the new round
+    // Reset player index to start with first player in each round
+    setCurrentPlayerIndex(0);
+    
+    // Reset current round's state but keep previous rounds' strokes
     setStrokes([]);
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
-  }, [currentRound]);
+  }, [currentRound, previousStrokes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -67,11 +92,31 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Clear canvas
+    // Clear canvas and redraw everything
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw all previous strokes
+    // Draw all previous strokes from past rounds
+    if (previousStrokes && previousStrokes.length > 0) {
+      previousStrokes.forEach(stroke => {
+        if (stroke.points.length > 0) {
+          context.beginPath();
+          context.moveTo(stroke.points[0].x, stroke.points[0].y);
+          
+          stroke.points.forEach((point, i) => {
+            if (i > 0) context.lineTo(point.x, point.y);
+          });
+          
+          context.strokeStyle = stroke.color;
+          context.lineWidth = stroke.width;
+          context.lineCap = 'round';
+          context.lineJoin = 'round';
+          context.stroke();
+        }
+      });
+    }
+    
+    // Draw current round's strokes
     strokes.forEach(stroke => {
       if (stroke.points.length > 0) {
         context.beginPath();
@@ -122,7 +167,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       context.lineJoin = 'round';
       context.stroke();
     }
-  }, [strokes, currentPlayerStrokes, currentStroke, canvasSize]);
+  }, [strokes, currentPlayerStrokes, currentStroke, canvasSize, previousStrokes]);
 
   useEffect(() => {
     const updateCanvasSize = () => {

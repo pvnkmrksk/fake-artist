@@ -49,22 +49,18 @@ const Game: React.FC = () => {
   const handleRoundComplete = (newStrokes: Stroke[]) => {
     // Save the complete round's strokes by combining with existing strokes
     const updatedStrokes = [...strokes, ...newStrokes];
+    setStrokes(updatedStrokes); // Keep all strokes for all rounds
     
     if (config && currentRound < config.roundCount) {
       // Start next round
       setCurrentRound(currentRound + 1);
-      setStrokes(updatedStrokes); // Keep all strokes for the final display
       
       toast({
         title: "Round complete!",
         description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
       });
-      
-      // We keep the strokes but signal to the DrawingCanvas to reset its player index
-      // by passing a new key with the current round
     } else {
       // All rounds complete, move to voting
-      setStrokes(updatedStrokes);
       setGamePhase('voting');
     }
   };
@@ -131,11 +127,12 @@ const Game: React.FC = () => {
       
       {gamePhase === 'drawing' && config && (
         <DrawingCanvas
-          key={`drawing-round-${currentRound}`} // Add a key prop to force re-render with each round
+          key={`drawing-round-${currentRound}`} // Force re-render with each round to reset player index
           players={players}
           currentRound={currentRound}
           totalRounds={config.roundCount}
           secretWord={secretWord}
+          previousStrokes={strokes} // Pass previous strokes to maintain drawing history
           onRoundComplete={handleRoundComplete}
         />
       )}

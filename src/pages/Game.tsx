@@ -1,15 +1,162 @@
+import React, { useState, useEffect } from 'react';
+import GameSetup from '@/components/GameSetup';
+import PlayerConfig from '@/components/PlayerConfig';
+import WordReveal from '@/components/WordReveal';
+import DrawingCanvas from '@/components/DrawingCanvas';
+import Voting from '@/components/Voting';
+import Results from '@/components/Results';
+import { Player, GameConfig, GamePhase, Stroke } from '@/types/game';
+import { getRandomWord } from '@/data/wordsList';
+import { useToast } from "@/components/ui/use-toast";
 
-import React from 'react'
-import { Link } from 'react-router-dom'
+const Game: React.FC = () => {
+  const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
+  const [config, setConfig] = useState<GameConfig | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [secretWord, setSecretWord] = useState<string>('');
+  const [currentRound, setCurrentRound] = useState<number>(1);
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [votes, setVotes] = useState<Record<number, number>>({});
+  const { toast } = useToast();
 
-export default function Game() {
+  useEffect(() => {
+    // Generate a new secret word when players are configured
+    if (players.length > 0 && !secretWord) {
+      setSecretWord(getRandomWord());
+    }
+  }, [players]);
+
+  const handleConfigSubmit = (newConfig: GameConfig) => {
+    setConfig(newConfig);
+    setGamePhase('playerConfig');
+  };
+
+  const handlePlayersConfigured = (configuredPlayers: Player[]) => {
+    setPlayers(configuredPlayers);
+    setGamePhase('wordReveal');
+    
+    // Notify that the game is starting
+    toast({
+      title: "Game starting!",
+      description: `${configuredPlayers.length} players ready to play.`,
+    });
+  };
+
+  const handleWordRevealComplete = () => {
+    setGamePhase('drawing');
+  };
+
+  const handleRoundComplete = (newStrokes: Stroke[]) => {
+    // Save the complete round's strokes by combining with existing strokes
+    const updatedStrokes = [...strokes, ...newStrokes];
+    setStrokes(updatedStrokes); // Keep all strokes for all rounds
+    
+    if (config && currentRound < config.roundCount) {
+      // Start next round
+      setCurrentRound(currentRound + 1);
+      
+      toast({
+        title: "Round complete!",
+        description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
+      });
+    } else {
+      // All rounds complete, move to voting
+      setGamePhase('voting');
+    }
+  };
+
+  const handleVotingComplete = (finalVotes: Record<number, number>) => {
+    setVotes(finalVotes);
+    setGamePhase('results');
+  };
+
+  const handlePlayAgain = () => {
+    // Keep the same players but reset everything else
+    setSecretWord(getRandomWord());
+    setCurrentRound(1);
+    setStrokes([]);
+    setVotes({});
+    
+    // Reassign the imposter role
+    const imposterIndex = Math.floor(Math.random() * players.length);
+    const updatedPlayers = players.map((player, index) => ({
+      ...player,
+      isImposter: index === imposterIndex
+    }));
+    
+    setPlayers(updatedPlayers);
+    setGamePhase('wordReveal');
+    
+    toast({
+      title: "New game starting!",
+      description: "Same players, new word and roles.",
+    });
+  };
+
+  const handleReturnHome = () => {
+    // Reset everything
+    setConfig(null);
+    setPlayers([]);
+    setSecretWord('');
+    setCurrentRound(1);
+    setStrokes([]);
+    setVotes({});
+    setGamePhase('setup');
+  };
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-blue-900 to-black text-white">
-      <h1 className="mb-6 text-4xl font-bold">Game Room</h1>
-      <p className="mb-8">Game interface will be implemented here</p>
-      <Link to="/" className="rounded bg-blue-600 px-6 py-2 text-lg transition hover:bg-blue-700">
-        Back to Home
-      </Link>
+    <div className="min-h-screen">
+      {gamePhase === 'setup' && (
+        <GameSetup onConfigSubmit={handleConfigSubmit} />
+      )}
+      
+      {gamePhase === 'playerConfig' && config && (
+        <PlayerConfig 
+          config={config}
+          onPlayersConfigured={handlePlayersConfigured} 
+        />
+      )}
+      
+      {gamePhase === 'wordReveal' && players.length > 0 && (
+        <WordReveal 
+          players={players}
+          secretWord={secretWord}
+          onComplete={handleWordRevealComplete}
+        />
+      )}
+      
+      {gamePhase === 'drawing' && config && (
+        <DrawingCanvas
+          key={`drawing-round-${currentRound}`} // Force re-render with each round to reset player index
+          players={players}
+          currentRound={currentRound}
+          totalRounds={config.roundCount}
+          secretWord={secretWord}
+          previousStrokes={strokes} // Pass previous strokes to maintain drawing history
+          onRoundComplete={handleRoundComplete}
+        />
+      )}
+      
+      {gamePhase === 'voting' && (
+        <Voting
+          players={players}
+          secretWord={secretWord}
+          strokes={strokes}
+          onVotingComplete={handleVotingComplete}
+        />
+      )}
+      
+      {gamePhase === 'results' && (
+        <Results
+          players={players}
+          votes={votes}
+          secretWord={secretWord}
+          onPlayAgain={handlePlayAgain}
+          onReturnHome={handleReturnHome}
+        />
+      )}
     </div>
-  )
-}
+  );
+};
+
+export default Game;

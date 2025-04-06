@@ -1,23 +1,34 @@
-
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Player, GameConfig } from '@/types/game';
-import { UserPlus } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast";
+import { useSocket } from '@/contexts/SocketContext';
 
-interface PlayerConfigProps {
+const PLAYER_COLORS = [
+  '#FF5733', '#33FF57', '#3357FF', '#F433FF', 
+  '#FF33A8', '#33FFF6', '#FFD633', '#A833FF',
+  '#FF8C33', '#33FFB8'
+];
+
+export interface PlayerConfigProps {
   config: GameConfig;
   onPlayersConfigured: (players: Player[]) => void;
+  isMultiplayer?: boolean; // Added the missing prop
 }
 
-const PlayerConfig: React.FC<PlayerConfigProps> = ({ config, onPlayersConfigured }) => {
+const PlayerConfig: React.FC<PlayerConfigProps> = ({ 
+  config, 
+  onPlayersConfigured,
+  isMultiplayer = false // Default value
+}) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
   const [currentPlayerName, setCurrentPlayerName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize player array with empty players
   useEffect(() => {
     const initialPlayers = Array.from({ length: config.playerCount }, (_, i) => ({
       id: i,
@@ -38,7 +49,6 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({ config, onPlayersConfigured
       return;
     }
 
-    // Check for duplicate names
     if (players.some(p => p.name === currentPlayerName.trim())) {
       setError("This name is already taken");
       return;
@@ -52,12 +62,10 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({ config, onPlayersConfigured
 
     setPlayers(updatedPlayers);
     
-    // Move to next player or finish
     if (currentPlayerIndex < config.playerCount - 1) {
       setCurrentPlayerIndex(currentPlayerIndex + 1);
       setCurrentPlayerName('');
     } else {
-      // Designate a random player as the imposter
       const imposterIndex = Math.floor(Math.random() * config.playerCount);
       const finalPlayers = updatedPlayers.map((player, index) => ({
         ...player,

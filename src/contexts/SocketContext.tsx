@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useToast } from "@/hooks/use-toast";
 
 // Using a mock URL - this would be your actual Socket.IO server in production
 const SOCKET_SERVER_URL = 'https://mock-socket-server.lovable.dev';
@@ -12,6 +13,7 @@ interface SocketContextType {
   createRoom: () => Promise<string>;
   joinRoom: (roomId: string) => Promise<boolean>;
   leaveRoom: () => void;
+  isConnecting: boolean; // Added to track connection state
 }
 
 export const SocketContext = createContext<SocketContextType>({
@@ -21,6 +23,7 @@ export const SocketContext = createContext<SocketContextType>({
   createRoom: async () => '',
   joinRoom: async () => false,
   leaveRoom: () => {},
+  isConnecting: false, // Default value
 });
 
 export const useSocket = () => useContext(SocketContext);
@@ -29,6 +32,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const { toast } = useToast();
   
   // Initialize socket connection
   useEffect(() => {
@@ -37,11 +42,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       transports: ['websocket'],
+      autoConnect: true,
+      timeout: 10000,
     });
 
     socketInstance.on('connect', () => {
       console.log('Socket connected');
       setIsConnected(true);
+      setIsConnecting(false);
+      toast({
+        title: "Connected to server",
+        description: "Ready for multiplayer gameplay",
+      });
+    });
+
+    socketInstance.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      setIsConnecting(false);
+      toast({
+        title: "Connection error",
+        description: "Could not connect to game server",
+        variant: "destructive"
+      });
     });
 
     socketInstance.on('disconnect', () => {
@@ -57,14 +79,29 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.log('Disconnecting socket');
       socketInstance.disconnect();
     };
-  }, []);
+  }, [toast]);
   
   // Room creation function
   const createRoom = async (): Promise<string> => {
     if (!socket) throw new Error('Socket not connected');
+    setIsConnecting(true);
     
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      // Add timeout to prevent infinite waiting
+      const timeout = setTimeout(() => {
+        setIsConnecting(false);
+        reject(new Error('Room creation timeout'));
+        toast({
+          title: "Room creation failed",
+          description: "Server took too long to respond",
+          variant: "destructive"
+        });
+      }, 5000);
+      
       socket.emit('create-room', (newRoomId: string) => {
+        clearTimeout(timeout);
+        setIsConnecting(false);
+        console.log('Room created:', newRoomId);
         setRoomId(newRoomId);
         resolve(newRoomId);
       });
@@ -74,10 +111,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Room joining function
   const joinRoom = async (roomToJoin: string): Promise<boolean> => {
     if (!socket) throw new Error('Socket not connected');
+    setIsConnecting(true);
     
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      // Add timeout to prevent infinite waiting
+      const timeout = setTimeout(() => {
+        setIsConnecting(false);
+        reject(new Error('Join room timeout'));
+        toast({
+          title: "Joining room failed",
+          description: "Server took too long to respond",
+          variant: "destructive"
+        });
+      }, 5000);
+      
       socket.emit('join-room', roomToJoin, (success: boolean) => {
+        clearTimeout(timeout);
+        setIsConnecting(false);
         if (success) {
+          console.log('Joined room:', roomToJoin);
           setRoomId(roomToJoin);
         }
         resolve(success);
@@ -99,7 +151,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     roomId,
     createRoom,
     joinRoom,
-    leaveRoom
+    leaveRoom,
+    isConnecting
   };
 
   return (

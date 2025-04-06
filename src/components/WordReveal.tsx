@@ -1,18 +1,23 @@
-
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Player } from '@/types/game';
-import { Eye, EyeOff, UserCheck, ArrowRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Eye, EyeOff } from 'lucide-react';
+import { useSocket } from '@/contexts/SocketContext';
 
-interface WordRevealProps {
+export interface WordRevealProps {
   players: Player[];
   secretWord: string;
   onComplete: () => void;
+  isMultiplayer?: boolean; // Added the missing prop
 }
 
-const WordReveal: React.FC<WordRevealProps> = ({ players, secretWord, onComplete }) => {
+const WordReveal: React.FC<WordRevealProps> = ({ 
+  players, 
+  secretWord, 
+  onComplete,
+  isMultiplayer = false // Default value
+}) => {
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
   const [showPass, setShowPass] = useState<boolean>(false);
@@ -38,7 +43,6 @@ const WordReveal: React.FC<WordRevealProps> = ({ players, secretWord, onComplete
     }
   };
 
-  // Automatically hide content after reveal
   useEffect(() => {
     if (isRevealed) {
       const timer = setTimeout(() => {

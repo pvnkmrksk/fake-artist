@@ -1,20 +1,28 @@
-
 import React from 'react';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Player } from '@/types/game';
+import { useSocket } from '@/contexts/SocketContext';
 import { CheckCircle, XCircle, RotateCw, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-interface ResultsProps {
+export interface ResultsProps {
   players: Player[];
   votes: Record<number, number>;
   secretWord: string;
   onPlayAgain: () => void;
   onReturnHome: () => void;
+  isMultiplayer?: boolean;
 }
 
-const Results: React.FC<ResultsProps> = ({ players, votes, secretWord, onPlayAgain, onReturnHome }) => {
+const Results: React.FC<ResultsProps> = ({
+  players,
+  votes,
+  secretWord,
+  onPlayAgain,
+  onReturnHome,
+  isMultiplayer = false
+}) => {
   // Find the imposter
   const imposter = players.find(player => player.isImposter);
   

@@ -11,9 +11,9 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { useSocket } from "@/contexts/SocketContext";
-import { Copy, Share2 } from "lucide-react";
+import { Copy, Share2, Loader2 } from "lucide-react";
 
 interface MultiplayerModalProps {
   isOpen: boolean;
@@ -27,7 +27,7 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   onGameStart 
 }) => {
   const { toast } = useToast();
-  const { createRoom, joinRoom, roomId } = useSocket();
+  const { createRoom, joinRoom, roomId, isConnecting } = useSocket();
   const [joinRoomId, setJoinRoomId] = useState("");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
@@ -140,10 +140,15 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
               ) : (
                 <Button 
                   onClick={handleCreateRoom} 
-                  disabled={isCreatingRoom}
+                  disabled={isCreatingRoom || isConnecting}
                   className="w-full"
                 >
-                  {isCreatingRoom ? "Creating..." : "Create New Room"}
+                  {(isCreatingRoom || isConnecting) ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {isCreatingRoom ? "Creating..." : "Connecting..."}
+                    </>
+                  ) : "Create New Room"}
                 </Button>
               )}
             </div>
@@ -162,9 +167,14 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 />
                 <Button 
                   onClick={handleJoinRoom}
-                  disabled={isJoiningRoom || !joinRoomId.trim()}
+                  disabled={isJoiningRoom || isConnecting || !joinRoomId.trim()}
                 >
-                  {isJoiningRoom ? "Joining..." : "Join"}
+                  {(isJoiningRoom || isConnecting) ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {isJoiningRoom ? "Joining..." : "Connecting..."}
+                    </>
+                  ) : "Join"}
                 </Button>
               </div>
             </div>

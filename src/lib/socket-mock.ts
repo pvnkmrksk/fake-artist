@@ -147,6 +147,16 @@ class MockSocketServer {
       console.log(`[MockSocketServer] Room ${roomId}: ${clients.size} clients`);
     });
   }
+  
+  // Get room ID for a client (public accessor method)
+  getRoomForClient(clientId: string): string | undefined {
+    return this.clientToRoom.get(clientId);
+  }
+  
+  // Check if a room exists
+  roomExists(roomId: string): boolean {
+    return this.rooms.has(roomId);
+  }
 }
 
 export default MockSocketServer.getInstance();

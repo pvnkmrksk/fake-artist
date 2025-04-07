@@ -122,7 +122,7 @@ const createMockSocket = () => {
   
   // Listen for drawing updates
   mockSocketServer.on('room:*:drawing-update', (data) => {
-    const roomId = mockSocketServer.clientToRoom.get(id);
+    const roomId = mockSocketServer.getRoomForClient(id);
     if (roomId && data && data.roomId === roomId) {
       mockSocket.receive('drawing-update', data);
     }
@@ -244,6 +244,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const joinRoom = async (roomToJoin: string): Promise<boolean> => {
     if (!socket) throw new Error('Socket not connected');
     setIsConnecting(true);
+    
+    // Validate room format before trying to join
+    if (!roomToJoin || roomToJoin.length !== 6) {
+      setIsConnecting(false);
+      toast({
+        title: "Invalid room code",
+        description: "Please enter a valid 6-character room code",
+        variant: "destructive"
+      });
+      return Promise.resolve(false);
+    }
+    
+    // Check if the room exists in our mock server
+    if (!mockSocketServer.roomExists(roomToJoin)) {
+      setIsConnecting(false);
+      toast({
+        title: "Room not found",
+        description: "The room you're trying to join doesn't exist",
+        variant: "destructive"
+      });
+      return Promise.resolve(false);
+    }
     
     return new Promise((resolve, reject) => {
       // Add timeout to prevent infinite waiting

@@ -54,8 +54,10 @@ const createMockSocket = () => {
         const callback = args[args.length - 1];
         if (typeof callback === 'function') {
           mockSocketServer.registerCallback(id, 'join-room', callback);
+          console.log(`[MockSocket] Attempting to join room ${roomId} with client ${id}`);
           const success = mockSocketServer.joinRoom(id, roomId);
           setTimeout(() => {
+            console.log(`[MockSocket] Join room result for ${roomId}: ${success}`);
             mockSocketServer.executeCallback(id, 'join-room', success);
           }, 300);
         }
@@ -256,8 +258,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return Promise.resolve(false);
     }
     
-    // Check if the room exists in our mock server
-    if (!mockSocketServer.roomExists(roomToJoin)) {
+    console.log(`[SocketContext] Checking if room ${roomToJoin} exists...`);
+    
+    // Pre-check if room exists to provide better feedback
+    const roomExists = mockSocketServer.roomExists(roomToJoin);
+    console.log(`[SocketContext] Room ${roomToJoin} exists: ${roomExists}`);
+    
+    if (!roomExists) {
       setIsConnecting(false);
       toast({
         title: "Room not found",
@@ -292,6 +299,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               description: `Successfully joined room ${roomToJoin}`,
             });
           } else {
+            console.log('[SocketContext] Failed to join room:', roomToJoin);
             toast({
               title: "Joining room failed",
               description: "Room might not exist or is full",

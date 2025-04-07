@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import GameSetup from '@/components/GameSetup';
 import PlayerConfig from '@/components/PlayerConfig';
@@ -8,7 +7,7 @@ import Voting from '@/components/Voting';
 import Results from '@/components/Results';
 import { Player, GameConfig, GamePhase, Stroke } from '@/types/game';
 import { getRandomWord } from '@/data/wordsList';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { useSocket } from '@/contexts/SocketContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -21,27 +20,28 @@ const Game: React.FC = () => {
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [votes, setVotes] = useState<Record<number, number>>({});
   const { toast } = useToast();
-  const { socket, roomId, leaveRoom } = useSocket();
+  const { socket, roomId, leaveRoom, joinRoom } = useSocket();
   const navigate = useNavigate();
 
-  // Handle room parameter in URL on component mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
     
     if (roomParam) {
-      // Clear the room parameter from URL
+      console.log("Found room param in URL:", roomParam);
+      
       navigate('/', { replace: true });
+      
+      // Don't auto-join here - the MultiplayerModal component handles this now
+      // This ensures we're connected before attempting to join
     }
   }, [navigate]);
 
-  // Set up socket event listeners for multiplayer game
   useEffect(() => {
     if (!socket || !config?.isMultiplayer) return;
 
-    // Listen for game state updates
     const handleGameStateUpdate = (gameState: any) => {
-      // Update local game state based on server data
+      console.log("Received game state update:", gameState);
       if (gameState.players) setPlayers(gameState.players);
       if (gameState.gamePhase) setGamePhase(gameState.gamePhase);
       if (gameState.secretWord) setSecretWord(gameState.secretWord);
@@ -50,26 +50,44 @@ const Game: React.FC = () => {
       if (gameState.votes) setVotes(gameState.votes);
     };
 
-    // Listen for new player joining
-    const handlePlayerJoined = (newPlayer: Player) => {
+    const handlePlayerJoined = (newPlayer: any) => {
+      console.log("Player joined event:", newPlayer);
       toast({
         title: "Player joined",
-        description: `${newPlayer.name} has joined the game`
+        description: `${newPlayer.name || 'A new player'} has joined the game`
       });
       
-      setPlayers(current => [...current, newPlayer]);
+      if (newPlayer.clientId) {
+        setPlayers(current => [...current, {
+          id: current.length + 1,
+          name: `Player ${current.length + 1}`,
+          color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
+          isImposter: false,
+          isOnline: true,
+          clientId: newPlayer.clientId
+        }]);
+      } else {
+        setPlayers(current => [...current, newPlayer]);
+      }
     };
 
-    // Listen for player leaving
-    const handlePlayerLeft = (playerId: number) => {
-      const leavingPlayer = players.find(p => p.id === playerId);
+    const handlePlayerLeft = (data: any) => {
+      const playerId = data.playerId || data.clientId;
+      console.log("Player left event:", data);
+      
+      const leavingPlayer = players.find(p => 
+        p.id === playerId || p.clientId === data.clientId
+      );
+      
       if (leavingPlayer) {
         toast({
           title: "Player left",
           description: `${leavingPlayer.name} has left the game`
         });
         
-        setPlayers(current => current.filter(p => p.id !== playerId));
+        setPlayers(current => current.filter(p => 
+          p.id !== playerId && p.clientId !== data.clientId
+        ));
       }
     };
 
@@ -84,14 +102,11 @@ const Game: React.FC = () => {
     };
   }, [socket, config?.isMultiplayer, players, toast]);
 
-  // Generate a new secret word when players are configured
   useEffect(() => {
-    // Generate a new secret word when players are configured
     if (players.length > 0 && !secretWord) {
       const word = getRandomWord();
       setSecretWord(word);
       
-      // Broadcast the word to other players in multiplayer mode
       if (config?.isMultiplayer && socket && config.isHost && roomId) {
         socket.emit('set-secret-word', { roomId, secretWord: word });
       }
@@ -102,7 +117,6 @@ const Game: React.FC = () => {
     setConfig(newConfig);
     
     if (newConfig.isMultiplayer) {
-      // In multiplayer mode, host configures the game and broadcasts settings
       if (newConfig.isHost && socket && roomId) {
         socket.emit('game-config', { 
           roomId, 
@@ -115,7 +129,6 @@ const Game: React.FC = () => {
   };
 
   const handlePlayersConfigured = (configuredPlayers: Player[]) => {
-    // Mark online players
     const onlinePlayers = configuredPlayers.map(player => ({
       ...player,
       isOnline: config?.isMultiplayer || false
@@ -124,7 +137,6 @@ const Game: React.FC = () => {
     setPlayers(onlinePlayers);
     setGamePhase('wordReveal');
     
-    // In multiplayer mode, broadcast player configuration
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('players-configured', { 
         roomId, 
@@ -141,7 +153,6 @@ const Game: React.FC = () => {
   const handleWordRevealComplete = () => {
     setGamePhase('drawing');
     
-    // In multiplayer mode, broadcast game phase change
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('phase-change', { 
         roomId, 
@@ -151,11 +162,9 @@ const Game: React.FC = () => {
   };
 
   const handleRoundComplete = (newStrokes: Stroke[]) => {
-    // Save the complete round's strokes by combining with existing strokes
     const updatedStrokes = [...strokes, ...newStrokes];
-    setStrokes(updatedStrokes); // Keep all strokes for all rounds
+    setStrokes(updatedStrokes);
     
-    // In multiplayer mode, broadcast strokes
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('round-complete', { 
         roomId, 
@@ -165,7 +174,6 @@ const Game: React.FC = () => {
     }
     
     if (config && currentRound < config.roundCount) {
-      // Start next round
       setCurrentRound(currentRound + 1);
       
       toast({
@@ -173,7 +181,6 @@ const Game: React.FC = () => {
         description: `Starting round ${currentRound + 1} of ${config.roundCount}`,
       });
       
-      // In multiplayer mode, broadcast next round
       if (config?.isMultiplayer && socket && roomId && config.isHost) {
         socket.emit('next-round', { 
           roomId, 
@@ -181,10 +188,8 @@ const Game: React.FC = () => {
         });
       }
     } else {
-      // All rounds complete, move to voting
       setGamePhase('voting');
       
-      // In multiplayer mode, broadcast phase change
       if (config?.isMultiplayer && socket && roomId && config.isHost) {
         socket.emit('phase-change', { 
           roomId, 
@@ -198,7 +203,6 @@ const Game: React.FC = () => {
     setVotes(finalVotes);
     setGamePhase('results');
     
-    // In multiplayer mode, broadcast votes and phase change
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('voting-complete', { 
         roomId, 
@@ -212,13 +216,11 @@ const Game: React.FC = () => {
   };
 
   const handlePlayAgain = () => {
-    // Keep the same players but reset everything else
     setSecretWord(getRandomWord());
     setCurrentRound(1);
     setStrokes([]);
     setVotes({});
     
-    // Reassign the imposter role
     const imposterIndex = Math.floor(Math.random() * players.length);
     const updatedPlayers = players.map((player, index) => ({
       ...player,
@@ -228,7 +230,6 @@ const Game: React.FC = () => {
     setPlayers(updatedPlayers);
     setGamePhase('wordReveal');
     
-    // In multiplayer mode, broadcast play again
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('play-again', { 
         roomId, 
@@ -244,12 +245,10 @@ const Game: React.FC = () => {
   };
 
   const handleReturnHome = () => {
-    // Leave the room if in multiplayer mode
     if (config?.isMultiplayer) {
       leaveRoom();
     }
     
-    // Reset everything
     setConfig(null);
     setPlayers([]);
     setSecretWord('');
@@ -284,12 +283,12 @@ const Game: React.FC = () => {
       
       {gamePhase === 'drawing' && config && (
         <DrawingCanvas
-          key={`drawing-round-${currentRound}`} // Force re-render with each round
+          key={`drawing-round-${currentRound}`}
           players={players}
           currentRound={currentRound}
           totalRounds={config.roundCount}
           secretWord={secretWord}
-          previousStrokes={strokes} // Pass previous strokes to maintain drawing history
+          previousStrokes={strokes}
           onRoundComplete={handleRoundComplete}
           isMultiplayer={config.isMultiplayer}
         />

@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useSocket } from "@/contexts/SocketContext";
 import { Copy, Share2, Loader2, RefreshCw, UserPlus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface MultiplayerModalProps {
   isOpen: boolean;
@@ -41,8 +42,13 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     if (roomParam) {
       setJoinRoomId(roomParam);
       setActiveTab('join');
+      
+      // Auto-join if room code is provided in URL
+      if (isConnected && roomParam.length === 6) {
+        handleJoinRoom(roomParam);
+      }
     }
-  }, []);
+  }, [isConnected]);
 
   const handleCreateRoom = async () => {
     try {
@@ -64,8 +70,8 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     }
   };
 
-  const handleJoinRoom = async () => {
-    if (!joinRoomId.trim()) {
+  const handleJoinRoom = async (roomIdToJoin = joinRoomId) => {
+    if (!roomIdToJoin.trim()) {
       toast({
         title: "Room code required",
         description: "Please enter a valid room code",
@@ -76,12 +82,13 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
 
     try {
       setIsJoiningRoom(true);
-      const success = await joinRoom(joinRoomId.trim());
+      console.log("Attempting to join room:", roomIdToJoin);
+      const success = await joinRoom(roomIdToJoin.trim());
       
       if (success) {
         toast({
           title: "Joined successfully!",
-          description: `You've joined room: ${joinRoomId}`,
+          description: `You've joined room: ${roomIdToJoin}`,
         });
         onGameStart(false); // Start as player (not host)
       } else {
@@ -114,6 +121,25 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     }
   };
 
+  const shareRoomLink = async () => {
+    if (roomId && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my game room',
+          text: `Join my game with room code: ${roomId}`,
+          url: `${window.location.origin}/?room=${roomId}`
+        });
+      } catch (error) {
+        console.error("Error sharing:", error);
+        // Fallback to copy
+        copyRoomLink();
+      }
+    } else {
+      // Fallback to copy if Web Share API is not available
+      copyRoomLink();
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
@@ -141,13 +167,25 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
               </p>
               {roomId ? (
                 <>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 p-2 border rounded bg-muted font-mono text-center">
-                      {roomId}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 p-2 border rounded bg-muted font-mono text-center">
+                        {roomId}
+                      </div>
+                      <Button variant="outline" size="icon" onClick={copyRoomLink}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={shareRoomLink}>
+                        <Share2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button variant="outline" size="icon" onClick={copyRoomLink}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Share this room code with friends so they can join
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">1 player connected</Badge>
+                    <Badge variant="outline" className="ml-auto">You (Host)</Badge>
                   </div>
                   <Button className="w-full" onClick={() => onGameStart(true)}>
                     <UserPlus className="h-4 w-4 mr-2" />
@@ -187,11 +225,13 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 <Input 
                   placeholder="Enter room code" 
                   value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value)}
+                  onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  className="font-mono uppercase"
                 />
                 <Button 
-                  onClick={handleJoinRoom}
-                  disabled={isJoiningRoom || isConnecting || !isConnected || !joinRoomId.trim()}
+                  onClick={() => handleJoinRoom()}
+                  disabled={isJoiningRoom || isConnecting || !isConnected || !joinRoomId.trim() || joinRoomId.length !== 6}
                 >
                   {(isJoiningRoom || isConnecting) ? (
                     <>

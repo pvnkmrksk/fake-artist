@@ -1,4 +1,3 @@
-
 /**
  * Socket.IO mock server for development/demo purposes
  * This simulates a socket server for testing multiplayer functionality
@@ -10,6 +9,8 @@ class MockSocketServer {
   private clientToRoom: Map<string, string> = new Map();
   private events: Map<string, Set<Function>> = new Map();
   private clientCallbacks: Map<string, Function> = new Map();
+  // Add shared storage for persistent room info across browser sessions
+  private static persistentRooms: Set<string> = new Set();
 
   private constructor() {
     console.log("[MockSocketServer] Initialized");
@@ -32,7 +33,11 @@ class MockSocketServer {
     const roomId = this.generateRoomId();
     this.rooms.set(roomId, new Set([clientId]));
     this.clientToRoom.set(clientId, roomId);
+    // Add to persistent rooms for cross-browser access
+    MockSocketServer.persistentRooms.add(roomId);
+    
     console.log(`[MockSocketServer] Room ${roomId} created by ${clientId}`);
+    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
     
     // Trigger a game event to notify clients
     this.triggerEvent('room-created', { roomId, clientId });
@@ -65,20 +70,45 @@ class MockSocketServer {
 
   // Join an existing room
   joinRoom(clientId: string, roomId: string): boolean {
-    if (!this.rooms.has(roomId)) {
+    console.log(`[MockSocketServer] Attempting to join room ${roomId} by client ${clientId}`);
+    console.log(`[MockSocketServer] Available rooms: ${Array.from(this.rooms.keys())}`);
+    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
+    
+    // Check both in-memory and persistent room storage
+    if (!this.rooms.has(roomId) && !MockSocketServer.persistentRooms.has(roomId)) {
       console.log(`[MockSocketServer] Room ${roomId} doesn't exist`);
       return false;
     }
 
+    // If room exists in persistent storage but not in memory, recreate it
+    if (MockSocketServer.persistentRooms.has(roomId) && !this.rooms.has(roomId)) {
+      console.log(`[MockSocketServer] Recreating room ${roomId} from persistent storage`);
+      this.rooms.set(roomId, new Set());
+    }
+
     const room = this.rooms.get(roomId)!;
+    
+    // Check if client is already in a room, if so, leave it
+    this.leaveCurrentRoom(clientId);
+    
+    // Add client to room
     room.add(clientId);
     this.clientToRoom.set(clientId, roomId);
     console.log(`[MockSocketServer] Client ${clientId} joined room ${roomId}`);
+    console.log(`[MockSocketServer] Room ${roomId} now has ${room.size} clients`);
     
     // Trigger a game event to notify clients
     this.triggerEvent('player-joined', { roomId, clientId });
     
     return true;
+  }
+
+  // Leave current room if client is in one
+  leaveCurrentRoom(clientId: string): void {
+    const currentRoomId = this.clientToRoom.get(clientId);
+    if (currentRoomId) {
+      this.leaveRoom(clientId);
+    }
   }
 
   // Leave a room
@@ -96,6 +126,7 @@ class MockSocketServer {
       if (room.size === 0) {
         this.rooms.delete(roomId);
         console.log(`[MockSocketServer] Room ${roomId} deleted (empty)`);
+        // Note: We're keeping it in persistentRooms to allow rejoining
       }
     }
     this.clientToRoom.delete(clientId);
@@ -146,6 +177,7 @@ class MockSocketServer {
     this.rooms.forEach((clients, roomId) => {
       console.log(`[MockSocketServer] Room ${roomId}: ${clients.size} clients`);
     });
+    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
   }
   
   // Get room ID for a client (public accessor method)
@@ -155,7 +187,16 @@ class MockSocketServer {
   
   // Check if a room exists
   roomExists(roomId: string): boolean {
-    return this.rooms.has(roomId);
+    // Check both in-memory rooms and persistent rooms
+    return this.rooms.has(roomId) || MockSocketServer.persistentRooms.has(roomId);
+  }
+  
+  // For testing only: clear all room data
+  clearAllRooms(): void {
+    this.rooms.clear();
+    this.clientToRoom.clear();
+    MockSocketServer.persistentRooms.clear();
+    console.log("[MockSocketServer] All rooms cleared");
   }
 }
 

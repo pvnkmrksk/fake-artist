@@ -1,6 +1,5 @@
 
-import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
-import { io, Socket } from 'socket.io-client';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import mockSocketServer from '@/lib/socket-mock';
 
@@ -41,21 +40,36 @@ const createMockSocket = () => {
       if (event === 'create-room') {
         const callback = args[args.length - 1];
         if (typeof callback === 'function') {
+          // Register the callback with the server and generate a room
+          mockSocketServer.registerCallback(id, 'create-room', callback);
           const roomId = mockSocketServer.createRoom(id);
-          setTimeout(() => callback(roomId), 500); // Simulate network delay
+          // Execute the callback with a slight delay to simulate network
+          setTimeout(() => {
+            mockSocketServer.executeCallback(id, 'create-room', roomId);
+          }, 300);
         }
       } 
       else if (event === 'join-room') {
         const roomId = args[0];
         const callback = args[args.length - 1];
         if (typeof callback === 'function') {
+          mockSocketServer.registerCallback(id, 'join-room', callback);
           const success = mockSocketServer.joinRoom(id, roomId);
-          setTimeout(() => callback(success), 500); // Simulate network delay
+          setTimeout(() => {
+            mockSocketServer.executeCallback(id, 'join-room', success);
+          }, 300);
         }
       }
       else if (event === 'leave-room') {
         const roomId = args[0];
         mockSocketServer.leaveRoom(id);
+      }
+      else if (event.includes('drawing-action')) {
+        // Forward drawing actions to all clients in the room
+        const data = args[0];
+        if (data && data.roomId) {
+          mockSocketServer.broadcastToRoom(data.roomId, 'drawing-update', data);
+        }
       }
       
       // Save emitter for later use
@@ -92,6 +106,27 @@ const createMockSocket = () => {
     const connectCallbacks = listeners.get('connect') || [];
     connectCallbacks.forEach((callback: any) => callback());
   }, 100);
+  
+  // Listen for broadcast events from the room
+  mockSocketServer.on('player-joined', (data) => {
+    if (data && data.roomId && mockSocketServer.getClientsInRoom(data.roomId).includes(id)) {
+      mockSocket.receive('player-joined', data);
+    }
+  });
+  
+  mockSocketServer.on('player-left', (data) => {
+    if (data && data.roomId && mockSocketServer.getClientsInRoom(data.roomId).includes(id)) {
+      mockSocket.receive('player-left', data);
+    }
+  });
+  
+  // Listen for drawing updates
+  mockSocketServer.on('room:*:drawing-update', (data) => {
+    const roomId = mockSocketServer.clientToRoom.get(id);
+    if (roomId && data && data.roomId === roomId) {
+      mockSocket.receive('drawing-update', data);
+    }
+  });
   
   return mockSocket;
 };
@@ -185,6 +220,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setIsConnecting(false);
           console.log('[SocketContext] Room created:', newRoomId);
           setRoomId(newRoomId);
+          toast({
+            title: "Room created",
+            description: `Successfully created room ${newRoomId}`,
+          });
           resolve(newRoomId);
         });
       } catch (error) {

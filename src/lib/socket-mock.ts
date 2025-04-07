@@ -9,6 +9,7 @@ class MockSocketServer {
   private rooms: Map<string, Set<string>> = new Map();
   private clientToRoom: Map<string, string> = new Map();
   private events: Map<string, Set<Function>> = new Map();
+  private clientCallbacks: Map<string, Function> = new Map();
 
   private constructor() {
     console.log("[MockSocketServer] Initialized");
@@ -37,6 +38,29 @@ class MockSocketServer {
     this.triggerEvent('room-created', { roomId, clientId });
     
     return roomId;
+  }
+
+  // Register a client callback for later execution
+  registerCallback(clientId: string, event: string, callback: Function): void {
+    const key = `${clientId}:${event}`;
+    this.clientCallbacks.set(key, callback);
+  }
+  
+  // Execute a registered callback for a client
+  executeCallback(clientId: string, event: string, ...args: any[]): void {
+    const key = `${clientId}:${event}`;
+    const callback = this.clientCallbacks.get(key);
+    if (callback) {
+      console.log(`[MockSocketServer] Executing callback for ${clientId} on ${event}`);
+      setTimeout(() => {
+        try {
+          callback(...args);
+        } catch (error) {
+          console.error(`[MockSocketServer] Error executing callback:`, error);
+        }
+      }, 100); // Small delay to simulate network latency
+      this.clientCallbacks.delete(key);
+    }
   }
 
   // Join an existing room

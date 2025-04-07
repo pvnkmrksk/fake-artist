@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useSocket } from "@/contexts/SocketContext";
-import { Copy, Share2, Loader2 } from "lucide-react";
+import { Copy, Share2, Loader2, RefreshCw, UserPlus } from "lucide-react";
 
 interface MultiplayerModalProps {
   isOpen: boolean;
@@ -27,10 +27,22 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   onGameStart 
 }) => {
   const { toast } = useToast();
-  const { createRoom, joinRoom, roomId, isConnecting } = useSocket();
+  const { createRoom, joinRoom, roomId, isConnecting, isConnected } = useSocket();
   const [joinRoomId, setJoinRoomId] = useState("");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [activeTab, setActiveTab] = useState('create');
+
+  // Check URL for room parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    
+    if (roomParam) {
+      setJoinRoomId(roomParam);
+      setActiveTab('join');
+    }
+  }, []);
 
   const handleCreateRoom = async () => {
     try {
@@ -40,8 +52,8 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
         title: "Room created!",
         description: `Your room code is: ${newRoomId}`,
       });
-      onGameStart(true); // Start as host
     } catch (error) {
+      console.error("Error creating room:", error);
       toast({
         title: "Error creating room",
         description: "Please try again later",
@@ -80,6 +92,7 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
         });
       }
     } catch (error) {
+      console.error("Error joining room:", error);
       toast({
         title: "Error joining room",
         description: "Please try again later",
@@ -111,7 +124,11 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <Tabs defaultValue="create" className="w-full">
+        <Tabs 
+          value={activeTab} 
+          onValueChange={setActiveTab}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="create">Create Room</TabsTrigger>
             <TabsTrigger value="join">Join Room</TabsTrigger>
@@ -133,14 +150,14 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                     </Button>
                   </div>
                   <Button className="w-full" onClick={() => onGameStart(true)}>
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Start Game
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Start Game as Host
                   </Button>
                 </>
               ) : (
                 <Button 
                   onClick={handleCreateRoom} 
-                  disabled={isCreatingRoom || isConnecting}
+                  disabled={isCreatingRoom || isConnecting || !isConnected}
                   className="w-full"
                 >
                   {(isCreatingRoom || isConnecting) ? (
@@ -148,7 +165,14 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       {isCreatingRoom ? "Creating..." : "Connecting..."}
                     </>
-                  ) : "Create New Room"}
+                  ) : !isConnected ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Connecting to server...
+                    </>
+                  ) : (
+                    "Create New Room"
+                  )}
                 </Button>
               )}
             </div>
@@ -167,16 +191,23 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 />
                 <Button 
                   onClick={handleJoinRoom}
-                  disabled={isJoiningRoom || isConnecting || !joinRoomId.trim()}
+                  disabled={isJoiningRoom || isConnecting || !isConnected || !joinRoomId.trim()}
                 >
                   {(isJoiningRoom || isConnecting) ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       {isJoiningRoom ? "Joining..." : "Connecting..."}
                     </>
-                  ) : "Join"}
+                  ) : (
+                    "Join"
+                  )}
                 </Button>
               </div>
+              {!isConnected && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Waiting for server connection...
+                </p>
+              )}
             </div>
           </TabsContent>
         </Tabs>

@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Player } from '@/types/game';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, UserCheck } from 'lucide-react';
 import { useSocket } from '@/contexts/SocketContext';
 
 export interface WordRevealProps {
@@ -101,10 +102,8 @@ const WordReveal: React.FC<WordRevealProps> = ({
             </Button>
           </div>
         ) : (
-          <motion.div 
-            className="bg-secondary rounded-lg p-8 my-4 select-none"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+          <div 
+            className="bg-secondary rounded-lg p-8 my-4 select-none transition-all duration-200 opacity-100 scale-100"
           >
             {isImposter ? (
               <div className="space-y-2">
@@ -124,7 +123,7 @@ const WordReveal: React.FC<WordRevealProps> = ({
             >
               <EyeOff className="mr-2 h-4 w-4" /> Hide
             </Button>
-          </motion.div>
+          </div>
         )}
       </CardContent>
       

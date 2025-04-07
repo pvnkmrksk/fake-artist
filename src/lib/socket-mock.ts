@@ -4,13 +4,11 @@
  * This simulates a socket server for testing multiplayer functionality
  */
 
-// This file won't actually be used in production, but demonstrates 
-// how we're handling the server-side socket logic
-
 class MockSocketServer {
   private static instance: MockSocketServer;
   private rooms: Map<string, Set<string>> = new Map();
   private clientToRoom: Map<string, string> = new Map();
+  private events: Map<string, Set<Function>> = new Map();
 
   private constructor() {
     console.log("[MockSocketServer] Initialized");
@@ -34,6 +32,10 @@ class MockSocketServer {
     this.rooms.set(roomId, new Set([clientId]));
     this.clientToRoom.set(clientId, roomId);
     console.log(`[MockSocketServer] Room ${roomId} created by ${clientId}`);
+    
+    // Trigger a game event to notify clients
+    this.triggerEvent('room-created', { roomId, clientId });
+    
     return roomId;
   }
 
@@ -48,6 +50,10 @@ class MockSocketServer {
     room.add(clientId);
     this.clientToRoom.set(clientId, roomId);
     console.log(`[MockSocketServer] Client ${clientId} joined room ${roomId}`);
+    
+    // Trigger a game event to notify clients
+    this.triggerEvent('player-joined', { roomId, clientId });
+    
     return true;
   }
 
@@ -59,6 +65,10 @@ class MockSocketServer {
     const room = this.rooms.get(roomId);
     if (room) {
       room.delete(clientId);
+      
+      // Trigger event before potentially deleting the room
+      this.triggerEvent('player-left', { roomId, clientId });
+      
       if (room.size === 0) {
         this.rooms.delete(roomId);
         console.log(`[MockSocketServer] Room ${roomId} deleted (empty)`);
@@ -73,6 +83,37 @@ class MockSocketServer {
     const room = this.rooms.get(roomId);
     if (!room) return [];
     return Array.from(room);
+  }
+  
+  // Broadcast a message to all clients in a room
+  broadcastToRoom(roomId: string, eventName: string, data: any): void {
+    const clients = this.getClientsInRoom(roomId);
+    if (clients.length === 0) return;
+    
+    console.log(`[MockSocketServer] Broadcasting ${eventName} to room ${roomId}`);
+    this.triggerEvent(`room:${roomId}:${eventName}`, data);
+  }
+  
+  // Register for server events
+  on(eventName: string, callback: Function): void {
+    if (!this.events.has(eventName)) {
+      this.events.set(eventName, new Set());
+    }
+    this.events.get(eventName)!.add(callback);
+  }
+  
+  // Trigger a server event
+  triggerEvent(eventName: string, data: any): void {
+    const callbacks = this.events.get(eventName);
+    if (!callbacks) return;
+    
+    callbacks.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`[MockSocketServer] Error in event handler for ${eventName}:`, error);
+      }
+    });
   }
 
   // Debug info

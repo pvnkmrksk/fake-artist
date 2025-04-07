@@ -1,19 +1,109 @@
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from "@/hooks/use-toast";
+import mockSocketServer from '@/lib/socket-mock';
 
-// Using a mock URL - this would be your actual Socket.IO server in production
-const SOCKET_SERVER_URL = 'https://mock-socket-server.lovable.dev';
+// Mock socket implementation for local development
+const createMockSocket = () => {
+  const listeners = new Map();
+  const emitters = new Map();
+  let id = `user-${Math.random().toString(36).substring(2, 9)}`;
+  
+  const mockSocket = {
+    id,
+    connected: true,
+    
+    on: (event: string, callback: any) => {
+      if (!listeners.has(event)) {
+        listeners.set(event, []);
+      }
+      listeners.get(event).push(callback);
+      return mockSocket;
+    },
+    
+    off: (event: string, callback?: any) => {
+      if (!listeners.has(event)) return mockSocket;
+      if (callback) {
+        const callbacks = listeners.get(event);
+        const index = callbacks.indexOf(callback);
+        if (index !== -1) callbacks.splice(index, 1);
+      } else {
+        listeners.delete(event);
+      }
+      return mockSocket;
+    },
+    
+    emit: (event: string, ...args: any[]) => {
+      console.log(`[MockSocket] Emitting ${event}`, args);
+      
+      // Special handling for certain events
+      if (event === 'create-room') {
+        const callback = args[args.length - 1];
+        if (typeof callback === 'function') {
+          const roomId = mockSocketServer.createRoom(id);
+          setTimeout(() => callback(roomId), 500); // Simulate network delay
+        }
+      } 
+      else if (event === 'join-room') {
+        const roomId = args[0];
+        const callback = args[args.length - 1];
+        if (typeof callback === 'function') {
+          const success = mockSocketServer.joinRoom(id, roomId);
+          setTimeout(() => callback(success), 500); // Simulate network delay
+        }
+      }
+      else if (event === 'leave-room') {
+        const roomId = args[0];
+        mockSocketServer.leaveRoom(id);
+      }
+      
+      // Save emitter for later use
+      if (!emitters.has(event)) {
+        emitters.set(event, []);
+      }
+      emitters.get(event).push(args);
+      
+      return mockSocket;
+    },
+    
+    // For testing/debugging
+    disconnect: () => {
+      console.log(`[MockSocket] Disconnecting`);
+      const disconnectCallbacks = listeners.get('disconnect') || [];
+      disconnectCallbacks.forEach((callback: any) => callback());
+      return mockSocket;
+    },
+    
+    // Simulate receiving an event
+    receive: (event: string, ...args: any[]) => {
+      console.log(`[MockSocket] Receiving ${event}`, args);
+      const callbacks = listeners.get(event) || [];
+      callbacks.forEach((callback: any) => callback(...args));
+      return mockSocket;
+    },
+    
+    // Get socket id
+    getId: () => id
+  };
+  
+  // Simulate connect event (already connected in mock)
+  setTimeout(() => {
+    const connectCallbacks = listeners.get('connect') || [];
+    connectCallbacks.forEach((callback: any) => callback());
+  }, 100);
+  
+  return mockSocket;
+};
 
 interface SocketContextType {
-  socket: Socket | null;
+  socket: any; // Changed from Socket | null to any to accommodate mock socket
   isConnected: boolean;
   roomId: string | null;
   createRoom: () => Promise<string>;
   joinRoom: (roomId: string) => Promise<boolean>;
   leaveRoom: () => void;
-  isConnecting: boolean; // Added to track connection state
+  isConnecting: boolean;
 }
 
 export const SocketContext = createContext<SocketContextType>({
@@ -23,13 +113,13 @@ export const SocketContext = createContext<SocketContextType>({
   createRoom: async () => '',
   joinRoom: async () => false,
   leaveRoom: () => {},
-  isConnecting: false, // Default value
+  isConnecting: false,
 });
 
 export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -37,17 +127,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   
   // Initialize socket connection
   useEffect(() => {
-    // Connect to Socket.IO server
-    const socketInstance = io(SOCKET_SERVER_URL, {
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-      autoConnect: true,
-      timeout: 10000,
-    });
-
+    console.log("[SocketContext] Initializing socket");
+    
+    // Create mock socket for local development
+    const socketInstance = createMockSocket();
+    
     socketInstance.on('connect', () => {
-      console.log('Socket connected');
+      console.log('[SocketContext] Socket connected with ID:', socketInstance.getId());
       setIsConnected(true);
       setIsConnecting(false);
       toast({
@@ -56,27 +142,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     });
 
-    socketInstance.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      setIsConnecting(false);
-      toast({
-        title: "Connection error",
-        description: "Could not connect to game server",
-        variant: "destructive"
-      });
-    });
-
     socketInstance.on('disconnect', () => {
-      console.log('Socket disconnected');
+      console.log('[SocketContext] Socket disconnected');
       setIsConnected(false);
       setRoomId(null);
+      toast({
+        title: "Disconnected",
+        description: "Lost connection to game server",
+        variant: "destructive"
+      });
     });
 
     setSocket(socketInstance);
 
     // Cleanup on unmount
     return () => {
-      console.log('Disconnecting socket');
+      console.log('[SocketContext] Cleaning up socket');
       socketInstance.disconnect();
     };
   }, [toast]);
@@ -98,13 +179,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
       }, 5000);
       
-      socket.emit('create-room', (newRoomId: string) => {
+      try {
+        socket.emit('create-room', (newRoomId: string) => {
+          clearTimeout(timeout);
+          setIsConnecting(false);
+          console.log('[SocketContext] Room created:', newRoomId);
+          setRoomId(newRoomId);
+          resolve(newRoomId);
+        });
+      } catch (error) {
         clearTimeout(timeout);
         setIsConnecting(false);
-        console.log('Room created:', newRoomId);
-        setRoomId(newRoomId);
-        resolve(newRoomId);
-      });
+        console.error('[SocketContext] Error creating room:', error);
+        reject(error);
+        toast({
+          title: "Room creation failed",
+          description: "An unexpected error occurred",
+          variant: "destructive"
+        });
+      }
     });
   };
 
@@ -125,15 +218,39 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
       }, 5000);
       
-      socket.emit('join-room', roomToJoin, (success: boolean) => {
+      try {
+        socket.emit('join-room', roomToJoin, (success: boolean) => {
+          clearTimeout(timeout);
+          setIsConnecting(false);
+          
+          if (success) {
+            console.log('[SocketContext] Joined room:', roomToJoin);
+            setRoomId(roomToJoin);
+            toast({
+              title: "Joined room",
+              description: `Successfully joined room ${roomToJoin}`,
+            });
+          } else {
+            toast({
+              title: "Joining room failed",
+              description: "Room might not exist or is full",
+              variant: "destructive"
+            });
+          }
+          
+          resolve(success);
+        });
+      } catch (error) {
         clearTimeout(timeout);
         setIsConnecting(false);
-        if (success) {
-          console.log('Joined room:', roomToJoin);
-          setRoomId(roomToJoin);
-        }
-        resolve(success);
-      });
+        console.error('[SocketContext] Error joining room:', error);
+        reject(error);
+        toast({
+          title: "Joining room failed",
+          description: "An unexpected error occurred",
+          variant: "destructive"
+        });
+      }
     });
   };
 
@@ -142,6 +259,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (socket && roomId) {
       socket.emit('leave-room', roomId);
       setRoomId(null);
+      toast({
+        title: "Left room",
+        description: "You have left the multiplayer game",
+      });
     }
   };
   

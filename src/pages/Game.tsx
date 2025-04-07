@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import GameSetup from '@/components/GameSetup';
 import PlayerConfig from '@/components/PlayerConfig';
@@ -58,14 +59,18 @@ const Game: React.FC = () => {
       });
       
       if (newPlayer.clientId) {
-        setPlayers(current => [...current, {
-          id: current.length + 1,
-          name: `Player ${current.length + 1}`,
-          color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
-          isImposter: false,
-          isOnline: true,
-          clientId: newPlayer.clientId
-        }]);
+        setPlayers(current => [
+          ...current, 
+          {
+            id: current.length + 1,
+            name: `Player ${current.length + 1}`,
+            color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
+            colorIndex: current.length % 8, // Add colorIndex property to match Player type
+            isImposter: false,
+            isOnline: true,
+            clientId: newPlayer.clientId
+          }
+        ]);
       } else {
         setPlayers(current => [...current, newPlayer]);
       }
@@ -75,8 +80,9 @@ const Game: React.FC = () => {
       const playerId = data.playerId || data.clientId;
       console.log("Player left event:", data);
       
+      // Find player by id or clientId, being careful with potential type issues
       const leavingPlayer = players.find(p => 
-        p.id === playerId || p.clientId === data.clientId
+        p.id === playerId || (p as any).clientId === data.clientId
       );
       
       if (leavingPlayer) {
@@ -86,7 +92,7 @@ const Game: React.FC = () => {
         });
         
         setPlayers(current => current.filter(p => 
-          p.id !== playerId && p.clientId !== data.clientId
+          p.id !== playerId && (p as any).clientId !== data.clientId
         ));
       }
     };

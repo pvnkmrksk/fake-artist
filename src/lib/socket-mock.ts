@@ -39,6 +39,13 @@ class MockSocketServer {
     console.log(`[MockSocketServer] Room ${roomId} created by ${clientId}`);
     console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
     
+    // Save to localStorage for cross-browser persistence
+    try {
+      localStorage.setItem('mock_socket_rooms', JSON.stringify(Array.from(MockSocketServer.persistentRooms)));
+    } catch (e) {
+      console.error("[MockSocketServer] Failed to save rooms to localStorage:", e);
+    }
+    
     // Trigger a game event to notify clients
     this.triggerEvent('room-created', { roomId, clientId });
     
@@ -68,20 +75,37 @@ class MockSocketServer {
     }
   }
 
+  // Try to load persistent rooms from localStorage
+  loadPersistentRooms(): void {
+    try {
+      const storedRooms = localStorage.getItem('mock_socket_rooms');
+      if (storedRooms) {
+        const roomsArray = JSON.parse(storedRooms);
+        MockSocketServer.persistentRooms = new Set(roomsArray);
+        console.log(`[MockSocketServer] Loaded persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
+      }
+    } catch (e) {
+      console.error("[MockSocketServer] Failed to load rooms from localStorage:", e);
+    }
+  }
+
   // Join an existing room
   joinRoom(clientId: string, roomId: string): boolean {
+    // Load rooms from localStorage first to catch any newly created rooms
+    this.loadPersistentRooms();
+    
     console.log(`[MockSocketServer] Attempting to join room ${roomId} by client ${clientId}`);
     console.log(`[MockSocketServer] Available rooms: ${Array.from(this.rooms.keys())}`);
     console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
     
-    // Check both in-memory and persistent room storage
-    if (!this.rooms.has(roomId) && !MockSocketServer.persistentRooms.has(roomId)) {
-      console.log(`[MockSocketServer] Room ${roomId} doesn't exist`);
+    // Room must exist in our persistent store
+    if (!MockSocketServer.persistentRooms.has(roomId)) {
+      console.log(`[MockSocketServer] Room ${roomId} doesn't exist in persistent storage`);
       return false;
     }
 
     // If room exists in persistent storage but not in memory, recreate it
-    if (MockSocketServer.persistentRooms.has(roomId) && !this.rooms.has(roomId)) {
+    if (!this.rooms.has(roomId)) {
       console.log(`[MockSocketServer] Recreating room ${roomId} from persistent storage`);
       this.rooms.set(roomId, new Set());
     }
@@ -125,7 +149,7 @@ class MockSocketServer {
       
       if (room.size === 0) {
         this.rooms.delete(roomId);
-        console.log(`[MockSocketServer] Room ${roomId} deleted (empty)`);
+        console.log(`[MockSocketServer] Room ${roomId} deleted from memory (empty)`);
         // Note: We're keeping it in persistentRooms to allow rejoining
       }
     }
@@ -187,6 +211,8 @@ class MockSocketServer {
   
   // Check if a room exists
   roomExists(roomId: string): boolean {
+    // First try to load from localStorage
+    this.loadPersistentRooms();
     // Check both in-memory rooms and persistent rooms
     return this.rooms.has(roomId) || MockSocketServer.persistentRooms.has(roomId);
   }
@@ -196,8 +222,20 @@ class MockSocketServer {
     this.rooms.clear();
     this.clientToRoom.clear();
     MockSocketServer.persistentRooms.clear();
+    
+    // Also clear from localStorage
+    try {
+      localStorage.removeItem('mock_socket_rooms');
+    } catch (e) {
+      console.error("[MockSocketServer] Failed to clear rooms from localStorage:", e);
+    }
+    
     console.log("[MockSocketServer] All rooms cleared");
   }
 }
 
-export default MockSocketServer.getInstance();
+// Load persistent rooms on initial import
+const server = MockSocketServer.getInstance();
+server.loadPersistentRooms();
+
+export default server;

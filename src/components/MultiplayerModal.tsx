@@ -40,12 +40,14 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     const roomParam = params.get('room');
     
     if (roomParam) {
-      setJoinRoomId(roomParam);
+      console.log("Found room param in URL:", roomParam);
+      setJoinRoomId(roomParam.toUpperCase());
       setActiveTab('join');
       
-      // Auto-join if room code is provided in URL
+      // Auto-join if room code is provided in URL and we're connected
       if (isConnected && roomParam.length === 6) {
-        handleJoinRoom(roomParam);
+        console.log("Auto-joining room from URL parameter");
+        handleJoinRoom(roomParam.toUpperCase());
       }
     }
   }, [isConnected]);
@@ -91,6 +93,7 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
           description: `You've joined room: ${roomIdToJoin}`,
         });
         onGameStart(false); // Start as player (not host)
+        onClose(); // Close the modal after successful join
       } else {
         toast({
           title: "Could not join room",
@@ -187,7 +190,10 @@ const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                     <Badge variant="secondary">1 player connected</Badge>
                     <Badge variant="outline" className="ml-auto">You (Host)</Badge>
                   </div>
-                  <Button className="w-full" onClick={() => onGameStart(true)}>
+                  <Button className="w-full" onClick={() => {
+                    onGameStart(true);
+                    onClose(); // Also close the modal
+                  }}>
                     <UserPlus className="h-4 w-4 mr-2" />
                     Start Game as Host
                   </Button>

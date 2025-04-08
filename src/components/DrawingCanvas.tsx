@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Separator } from "@/components/ui/separator";
 import DrawingTimer from "@/components/DrawingTimer";
+import { useCanvasSize } from "@/hooks/use-canvas-size";
 
 interface DrawingCanvasProps {
   players: Player[];
@@ -54,9 +54,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [currentPlayerStrokes, setCurrentPlayerStrokes] = useState<Stroke[]>([]);
-  const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
-  const [showSecretWord, setShowSecretWord] = useState(false);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  
+  const canvasSize = useCanvasSize(containerRef, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
   
   const { socket, roomId } = useSocket();
   const { toast } = useToast();
@@ -65,35 +65,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const currentPlayer = players[currentPlayerIndex];
   const isCurrentPlayerImposter = currentPlayer?.isImposter || false;
   
-  // Set up responsiveness based on container size
-  useEffect(() => {
-    const updateCanvasSize = () => {
-      const container = containerRef.current;
-      if (container) {
-        // For desktop, use a max width with aspect ratio
-        // For mobile, use full width minus padding
-        const maxWidth = isMobile ? window.innerWidth - 40 : 500;
-        const width = Math.min(container.clientWidth - 20, maxWidth);
-          
-        setCanvasSize({
-          width,
-          height: width // Keep it square
-        });
-      }
-    };
-
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
-    return () => window.removeEventListener('resize', updateCanvasSize);
-  }, [isMobile]);
-
-  // Toggle secret word visibility
-  useEffect(() => {
-    // Only show the secret word when not actively drawing
-    setShowSecretWord(!isDrawing);
-  }, [isDrawing]);
-
-  // Reset canvas and state for new round
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -101,40 +72,32 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Clear canvas first
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw all previous strokes from past rounds
     if (previousStrokes && previousStrokes.length > 0) {
       drawStrokes(context, previousStrokes);
     }
     
-    // Reset player index to start with first player in each round
     setCurrentPlayerIndex(0);
     
-    // Reset current round's state but keep previous rounds' strokes
     setStrokes([]);
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     
-    // Start timer for first player if enabled
     if (timerEnabled) {
       setIsTimerActive(true);
     }
   }, [currentRound, previousStrokes, timerEnabled]);
 
-  // Set up multiplayer drawing socket listeners
   useEffect(() => {
     if (!socket || !isMultiplayer) return;
     
     const handleRemoteDrawingAction = (action: DrawingAction) => {
-      // Only process drawing actions if it's not from the current player
       const playerObj = players.find(p => p.id === action.playerId);
       if (!playerObj) return;
       
       if (action.type === 'start' && action.point) {
-        // Start a new stroke for the remote player
         const newStroke: Stroke = {
           points: [action.point],
           color: action.color,
@@ -146,7 +109,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         redrawCanvas([...strokes, newStroke]);
       } 
       else if (action.type === 'move' && action.point) {
-        // Find the most recent stroke for this player and add a point
         setStrokes(prev => {
           const playerStrokes = prev.filter(s => s.playerId === action.playerId);
           if (playerStrokes.length === 0) return prev;
@@ -167,7 +129,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             points: [...updatedStrokes[lastStrokeIndex].points, action.point]
           };
           
-          // Redraw with updated strokes
           redrawCanvas(updatedStrokes);
           
           return updatedStrokes;
@@ -182,7 +143,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
   }, [socket, isMultiplayer, players, strokes]);
 
-  // Redraw the canvas with current state
   const redrawCanvas = (allStrokes: Stroke[]) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -190,28 +150,22 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const context = canvas.getContext('2d');
     if (!context) return;
     
-    // Clear canvas
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw all previous strokes from past rounds
     if (previousStrokes && previousStrokes.length > 0) {
       drawStrokes(context, previousStrokes);
     }
     
-    // Draw current round strokes
     drawStrokes(context, allStrokes);
     
-    // Draw current player strokes
     drawStrokes(context, currentPlayerStrokes);
     
-    // Draw current stroke being created
     if (currentStroke && currentStroke.points.length > 0) {
       drawStroke(context, currentStroke);
     }
   };
   
-  // Helper to draw multiple strokes
   const drawStrokes = (context: CanvasRenderingContext2D, strokesArray: Stroke[]) => {
     strokesArray.forEach(stroke => {
       if (stroke.points.length > 0) {
@@ -220,7 +174,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     });
   };
   
-  // Helper to draw a single stroke
   const drawStroke = (context: CanvasRenderingContext2D, stroke: Stroke) => {
     context.beginPath();
     context.moveTo(stroke.points[0].x, stroke.points[0].y);
@@ -236,7 +189,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     context.stroke();
   };
 
-  // Event handlers for drawing
   const getCanvasCoordinates = (e: React.TouchEvent | React.MouseEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -244,13 +196,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const rect = canvas.getBoundingClientRect();
     
     if ('touches' in e) {
-      // Touch event
       return {
         x: e.touches[0].clientX - rect.left,
         y: e.touches[0].clientY - rect.top
       };
     } else {
-      // Mouse event
       return {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
@@ -260,7 +210,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const startDrawing = (e: React.TouchEvent | React.MouseEvent) => {
     if (currentPlayerStrokes.length > 0) {
-      // Player has already drawn a stroke, don't allow starting a new one
       return;
     }
     
@@ -276,7 +225,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     setCurrentStroke(newStroke);
     
-    // Send drawing action to other players if in multiplayer mode
     if (isMultiplayer && socket && roomId) {
       socket.emit('drawing-action', {
         type: 'start',
@@ -301,14 +249,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         points: [...prevStroke.points, point]
       };
       
-      // Redraw with updated stroke
       redrawCanvas(strokes);
       drawStroke(
         canvasRef.current?.getContext('2d') as CanvasRenderingContext2D, 
         updatedStroke
       );
       
-      // Send drawing action to other players if in multiplayer mode
       if (isMultiplayer && socket && roomId) {
         socket.emit('drawing-action', {
           type: 'move',
@@ -331,11 +277,11 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     setIsDrawing(false);
     if (currentStroke.points.length > 1) {
-      // Only save if there are at least 2 points (a visible line)
-      setCurrentPlayerStrokes([...currentPlayerStrokes, currentStroke]);
+      setCurrentPlayerStrokes(prevStrokes => [...prevStrokes, currentStroke]);
+      
+      redrawCanvas([...strokes, ...currentPlayerStrokes, currentStroke]);
     }
     
-    // Send drawing action to other players if in multiplayer mode
     if (isMultiplayer && socket && roomId) {
       socket.emit('drawing-action', {
         type: 'end',
@@ -348,13 +294,16 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handleUndo = () => {
-    // Clear all strokes for the current player - improved to take effect immediately
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     setIsDrawing(false);
     
-    // Redraw canvas without current player's strokes - happens immediately
     redrawCanvas(strokes);
+    
+    toast({
+      title: "Strokes removed",
+      description: "Your drawing has been cleared"
+    });
   };
 
   const handleConfirmStroke = () => {
@@ -367,18 +316,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       return;
     }
     
-    // Stop the timer
     setIsTimerActive(false);
     
-    // Add all of the current player's strokes to the main strokes array
     const updatedStrokes = [...strokes, ...currentPlayerStrokes];
     setStrokes(updatedStrokes);
     
-    // Reset the current player's strokes
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     
-    // Notify other players in multiplayer mode
     if (isMultiplayer && socket && roomId) {
       socket.emit('player-turn-complete', {
         playerId: currentPlayer.id,
@@ -387,33 +332,27 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       });
     }
     
-    // Advance to the next player or end the round
     if (currentPlayerIndex < players.length - 1) {
       const nextPlayerIndex = currentPlayerIndex + 1;
       setCurrentPlayerIndex(nextPlayerIndex);
       
-      // Start timer for next player if enabled
       if (timerEnabled) {
         setTimeout(() => setIsTimerActive(true), 500);
       }
     } else {
-      // All players have drawn, end the round
       onRoundComplete(updatedStrokes);
     }
   };
 
-  // Handler for when timer expires
   const handleTimeExpired = () => {
     toast({
       title: "Time's up!",
       description: "Your turn has ended."
     });
     
-    // If player has drawn something, confirm it
     if (currentPlayerStrokes.length > 0) {
       handleConfirmStroke();
     } else {
-      // If player hasn't drawn anything, add a small dot
       const canvas = canvasRef.current;
       if (canvas) {
         const context = canvas.getContext('2d');
@@ -438,7 +377,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
   };
 
-  // Color legend component
   const ColorLegend = () => (
     <div className="mt-4 p-3 bg-card rounded-md border shadow-sm">
       <h3 className="text-sm font-medium mb-2">Players</h3>
@@ -461,13 +399,10 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-2xl mx-auto">
         <div className="mb-4 flex justify-between items-center">
           <div>
             <span className="font-medium">Round {currentRound} of {totalRounds}</span>
-            {showSecretWord && !isCurrentPlayerImposter && (
-              <p className="text-sm text-muted-foreground">Word: {secretWord}</p>
-            )}
           </div>
           <div className="flex items-center">
             <div 
@@ -483,7 +418,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </div>
         </div>
         
-        {/* Timer (if enabled) */}
         {timerEnabled && (
           <div className="mb-4">
             <DrawingTimer 
@@ -494,7 +428,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </div>
         )}
         
-        <div className="bg-white rounded-lg shadow-md overflow-hidden" ref={containerRef}>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mx-auto" ref={containerRef}>
           <AspectRatio ratio={1 / 1} className="bg-white">
             <canvas
               ref={canvasRef}
@@ -516,7 +450,6 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </AspectRatio>
         </div>
 
-        {/* Color legend - always visible */}
         <ColorLegend />
         
         <div className="mt-4 flex justify-between">

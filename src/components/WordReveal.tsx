@@ -10,14 +10,14 @@ export interface WordRevealProps {
   players: Player[];
   secretWord: string;
   onComplete: () => void;
-  isMultiplayer?: boolean; // Added the missing prop
+  isMultiplayer?: boolean;
 }
 
 const WordReveal: React.FC<WordRevealProps> = ({ 
   players, 
   secretWord, 
   onComplete,
-  isMultiplayer = false // Default value
+  isMultiplayer = false
 }) => {
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
   const [isRevealed, setIsRevealed] = useState<boolean>(false);

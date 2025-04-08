@@ -7,6 +7,7 @@ import { useSocket } from '@/contexts/SocketContext';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { useCanvasSize } from '@/hooks/use-canvas-size';
 
 export interface VotingProps {
   players: Player[];
@@ -25,17 +26,17 @@ const Voting: React.FC<VotingProps> = ({
 }) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [votes, setVotes] = useState<Record<number, number>>({});
-  const [votedPlayerIds, setVotedPlayerIds] = useState<Set<number>>(new Set());
+  const [votingPlayerId, setVotingPlayerId] = useState<number>(players[0]?.id || 0);
+  const [playerVotes, setPlayerVotes] = useState<Map<number, number>>(new Map());
   const [playersWhoVoted, setPlayersWhoVoted] = useState<Set<number>>(new Set());
-  const [canvasSize, setCanvasSize] = useState({ width: 350, height: 350 });
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   
   const { socket, roomId } = useSocket();
   const { toast } = useToast();
   
-  // Get local player ID - in a real app you'd get this from authentication
-  // For now we can use the first player or socket ID if available
-  const localPlayerId = players[0]?.id;
+  // Use the canvas size hook for responsive canvas
+  const canvasSize = useCanvasSize(containerRef, { width: 350, height: 350 });
 
   // Draw the final image when component loads
   useEffect(() => {
@@ -64,7 +65,7 @@ const Voting: React.FC<VotingProps> = ({
       context.lineJoin = 'round';
       context.stroke();
     });
-  }, [strokes]);
+  }, [strokes, canvasSize]);
 
   // Setup vote collection for multiplayer
   useEffect(() => {
@@ -100,7 +101,7 @@ const Voting: React.FC<VotingProps> = ({
     };
   }, [isMultiplayer, socket, players.length, votes, playersWhoVoted, onVotingComplete]);
 
-  const handleVote = () => {
+  const handleVoteForLocalGame = () => {
     if (selectedPlayerId === null) {
       toast({
         title: "No selection",
@@ -110,7 +111,61 @@ const Voting: React.FC<VotingProps> = ({
       return;
     }
     
-    if (votedPlayerIds.has(localPlayerId)) {
+    // Record this player's vote
+    const newPlayerVotes = new Map(playerVotes);
+    newPlayerVotes.set(votingPlayerId, selectedPlayerId);
+    setPlayerVotes(newPlayerVotes);
+    
+    // Update vote counts
+    const newVotes = { ...votes };
+    newVotes[selectedPlayerId] = (newVotes[selectedPlayerId] || 0) + 1;
+    setVotes(newVotes);
+    
+    // Add to players who voted
+    setPlayersWhoVoted(current => {
+      const updated = new Set(current);
+      updated.add(votingPlayerId);
+      return updated;
+    });
+
+    toast({
+      title: "Vote recorded",
+      description: `${players.find(p => p.id === votingPlayerId)?.name} voted for ${players.find(p => p.id === selectedPlayerId)?.name}`,
+    });
+
+    // Check if all players have voted (for local game)
+    if (!isMultiplayer) {
+      // If this was the last player to vote
+      if (playersWhoVoted.size + 1 >= players.length) {
+        setTimeout(() => {
+          onVotingComplete(newVotes);
+        }, 1000);
+      } else {
+        // Move to next player
+        const nextPlayerIndex = players.findIndex(p => p.id === votingPlayerId) + 1;
+        if (nextPlayerIndex < players.length) {
+          setVotingPlayerId(players[nextPlayerIndex].id);
+          setSelectedPlayerId(null);
+        }
+      }
+    }
+  };
+
+  const handleVoteMultiplayer = () => {
+    if (selectedPlayerId === null) {
+      toast({
+        title: "No selection",
+        description: "Please select a player to vote for.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Get the local player ID - for multiplayer this might be different
+    const localPlayerId = players[0]?.id;
+    
+    // Check if already voted
+    if (playersWhoVoted.has(localPlayerId)) {
       toast({
         title: "Already voted",
         description: "You've already cast your vote.",
@@ -118,13 +173,6 @@ const Voting: React.FC<VotingProps> = ({
       });
       return;
     }
-
-    // Mark this player as having voted
-    setVotedPlayerIds(current => {
-      const updated = new Set(current);
-      updated.add(localPlayerId);
-      return updated;
-    });
     
     // Update local votes state
     const updatedVotes = { ...votes };
@@ -152,19 +200,40 @@ const Voting: React.FC<VotingProps> = ({
       });
     }
 
-    // For single player or if all players have voted in multiplayer
-    if (!isMultiplayer || playersWhoVoted.size + 1 >= players.length) {
+    // Check if all players have voted in multiplayer
+    if (playersWhoVoted.size + 1 >= players.length) {
       setTimeout(() => {
         onVotingComplete(updatedVotes);
       }, 1000);
     }
   };
 
+  const handleVote = () => {
+    if (isMultiplayer) {
+      handleVoteMultiplayer();
+    } else {
+      handleVoteForLocalGame();
+    }
+  };
+
+  // Get the name of the currently voting player for local game
+  const currentVotingPlayerName = players.find(p => p.id === votingPlayerId)?.name || "Player";
+  
+  // Determine if the current player has already voted (different for local vs multiplayer)
+  const hasCurrentPlayerVoted = isMultiplayer 
+    ? playersWhoVoted.has(players[0]?.id) 
+    : playerVotes.has(votingPlayerId);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-center">Voting Time</CardTitle>
+          {!isMultiplayer && (
+            <div className="text-center text-sm text-muted-foreground">
+              {currentVotingPlayerName}'s turn to vote
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-lg text-center">
@@ -174,7 +243,7 @@ const Voting: React.FC<VotingProps> = ({
           {/* Display the final drawing */}
           <div className="mb-4">
             <p className="text-sm mb-2">The word was: <strong>{secretWord}</strong></p>
-            <div className="bg-white border rounded-md overflow-hidden">
+            <div className="bg-white border rounded-md overflow-hidden" ref={containerRef}>
               <AspectRatio ratio={1/1}>
                 <canvas
                   ref={canvasRef}
@@ -191,8 +260,8 @@ const Voting: React.FC<VotingProps> = ({
               <Button
                 key={player.id}
                 variant={selectedPlayerId === player.id ? "default" : "outline"}
-                onClick={() => !votedPlayerIds.has(localPlayerId) && setSelectedPlayerId(player.id)}
-                disabled={votedPlayerIds.has(localPlayerId)}
+                onClick={() => !hasCurrentPlayerVoted && setSelectedPlayerId(player.id)}
+                disabled={hasCurrentPlayerVoted}
                 className="flex justify-between items-center"
               >
                 <span>{player.name}</span>
@@ -206,10 +275,10 @@ const Voting: React.FC<VotingProps> = ({
           </div>
           <Button 
             onClick={handleVote} 
-            disabled={selectedPlayerId === null || votedPlayerIds.has(localPlayerId)} 
+            disabled={selectedPlayerId === null || hasCurrentPlayerVoted} 
             className="w-full"
           >
-            {votedPlayerIds.has(localPlayerId) ? "Vote Recorded" : "Submit Vote"}
+            {hasCurrentPlayerVoted ? "Vote Recorded" : "Submit Vote"}
           </Button>
           
           {playersWhoVoted.size > 0 && (

@@ -22,8 +22,9 @@ const Game: React.FC = () => {
   const [votes, setVotes] = useState<Record<number, number>>({});
   const [timerDuration, setTimerDuration] = useState<number>(30); // Default 30 seconds
   const [timerEnabled, setTimerEnabled] = useState<boolean>(false);
+  const [startingPlayerOffset, setStartingPlayerOffset] = useState<number>(0);
   const { toast } = useToast();
-  const { socket, roomId, leaveRoom, joinRoom } = useSocket();
+  const { socket, roomId, leaveRoom } = useSocket();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,11 +33,7 @@ const Game: React.FC = () => {
     
     if (roomParam) {
       console.log("Found room param in URL:", roomParam);
-      
       navigate('/', { replace: true });
-      
-      // Don't auto-join here - the MultiplayerModal component handles this now
-      // This ensures we're connected before attempting to join
     }
   }, [navigate]);
 
@@ -53,6 +50,7 @@ const Game: React.FC = () => {
       if (gameState.votes) setVotes(gameState.votes);
       if (gameState.timerDuration !== undefined) setTimerDuration(gameState.timerDuration);
       if (gameState.timerEnabled !== undefined) setTimerEnabled(gameState.timerEnabled);
+      if (gameState.startingPlayerOffset !== undefined) setStartingPlayerOffset(gameState.startingPlayerOffset);
     };
 
     const handlePlayerJoined = (newPlayer: any) => {
@@ -127,7 +125,7 @@ const Game: React.FC = () => {
     setConfig(newConfig);
     
     // Set timer settings if provided in config
-    if (newConfig.timerDuration) {
+    if (newConfig.timerEnabled && newConfig.timerDuration) {
       setTimerDuration(newConfig.timerDuration);
       setTimerEnabled(true);
     } else {
@@ -147,8 +145,11 @@ const Game: React.FC = () => {
   };
 
   const handlePlayersConfigured = (configuredPlayers: Player[]) => {
-    // Assign imposter randomly
+    // Assign truly random imposter
     const imposterIndex = Math.floor(Math.random() * configuredPlayers.length);
+    
+    console.log("Random imposter index:", imposterIndex);
+    
     const playersWithImposter = configuredPlayers.map((player, index) => ({
       ...player,
       isImposter: index === imposterIndex,
@@ -156,12 +157,14 @@ const Game: React.FC = () => {
     }));
     
     setPlayers(playersWithImposter);
+    setStartingPlayerOffset(0); // Reset starting player offset for first game
     setGamePhase('wordReveal');
     
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('players-configured', { 
         roomId, 
-        players: playersWithImposter 
+        players: playersWithImposter,
+        startingPlayerOffset: 0
       });
     }
     
@@ -237,22 +240,29 @@ const Game: React.FC = () => {
   };
 
   const handlePlayAgain = () => {
+    // Get a new word for the next game
     const word = getRandomWord();
     setSecretWord(word);
     setCurrentRound(1);
     setStrokes([]);
     setVotes({});
     
-    // Rotate players for next game - first player becomes last
-    const rotatedPlayers = [...players];
-    const firstPlayer = rotatedPlayers.shift();
-    if (firstPlayer) {
-      rotatedPlayers.push(firstPlayer);
+    // Update the starting player offset for rotation
+    const newOffset = (startingPlayerOffset + 1) % players.length;
+    setStartingPlayerOffset(newOffset);
+    
+    // Rotate players for next game - first player becomes last, with offset
+    const rotatedPlayerOrder = [...players];
+    for (let i = 0; i < newOffset; i++) {
+      const firstPlayer = rotatedPlayerOrder.shift();
+      if (firstPlayer) {
+        rotatedPlayerOrder.push(firstPlayer);
+      }
     }
     
     // Randomly select imposter for next game
-    const imposterIndex = Math.floor(Math.random() * rotatedPlayers.length);
-    const updatedPlayers = rotatedPlayers.map((player, index) => ({
+    const imposterIndex = Math.floor(Math.random() * rotatedPlayerOrder.length);
+    const updatedPlayers = rotatedPlayerOrder.map((player, index) => ({
       ...player,
       isImposter: index === imposterIndex
     }));
@@ -264,7 +274,8 @@ const Game: React.FC = () => {
       socket.emit('play-again', { 
         roomId, 
         players: updatedPlayers,
-        secretWord: word
+        secretWord: word,
+        startingPlayerOffset: newOffset
       });
     }
     
@@ -286,6 +297,7 @@ const Game: React.FC = () => {
     setStrokes([]);
     setVotes({});
     setGamePhase('setup');
+    setStartingPlayerOffset(0);
   };
 
   return (

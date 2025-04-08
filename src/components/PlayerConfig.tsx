@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Player, GameConfig } from '@/types/game';
 import { useToast } from "@/hooks/use-toast";
 import { useSocket } from '@/contexts/SocketContext';
+import { getRandomName } from '@/data/wordsList';
 
 const PLAYER_COLORS = [
   '#FF5733', '#33FF57', '#3357FF', '#F433FF', 
@@ -16,17 +17,18 @@ const PLAYER_COLORS = [
 export interface PlayerConfigProps {
   config: GameConfig;
   onPlayersConfigured: (players: Player[]) => void;
-  isMultiplayer?: boolean; // Added the missing prop
+  isMultiplayer?: boolean;
 }
 
 const PlayerConfig: React.FC<PlayerConfigProps> = ({ 
   config, 
   onPlayersConfigured,
-  isMultiplayer = false // Default value
+  isMultiplayer = false
 }) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
-  const [currentPlayerName, setCurrentPlayerName] = useState<string>('');
+  const [currentPlayerName, setCurrentPlayerName] = useState<string>(getRandomName());
+  const [isEditingName, setIsEditingName] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,6 +43,14 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentPlayerName(e.target.value);
     setError(null);
+  };
+
+  const handleNameFocus = () => {
+    // Clear the placeholder name only on first focus
+    if (!isEditingName) {
+      setCurrentPlayerName('');
+      setIsEditingName(true);
+    }
   };
 
   const handleAddPlayer = () => {
@@ -64,7 +74,8 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({
     
     if (currentPlayerIndex < config.playerCount - 1) {
       setCurrentPlayerIndex(currentPlayerIndex + 1);
-      setCurrentPlayerName('');
+      setCurrentPlayerName(getRandomName());
+      setIsEditingName(false);
     } else {
       const imposterIndex = Math.floor(Math.random() * config.playerCount);
       const finalPlayers = updatedPlayers.map((player, index) => ({
@@ -91,9 +102,10 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({
             </div>
             <div className="flex-1">
               <Input
-                placeholder="Enter your name"
+                placeholder={getRandomName()}
                 value={currentPlayerName}
                 onChange={handleNameChange}
+                onFocus={handleNameFocus}
                 className={error ? "border-red-500" : ""}
                 autoFocus
               />

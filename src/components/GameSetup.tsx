@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { GameConfig } from '@/types/game';
 import MultiplayerModal from '@/components/MultiplayerModal';
 import { useNavigate } from 'react-router-dom';
+import { ExternalLink } from 'lucide-react';
 
 interface GameSetupProps {
   onConfigSubmit: (config: GameConfig) => void;
@@ -63,8 +64,24 @@ const GameSetup: React.FC<GameSetupProps> = ({
     setTimerDuration(value[0]);
   };
 
+  const handlePlayerCountChange = (value: number[]) => {
+    setPlayerCount(value[0]);
+  };
+
+  const handleRoundCountChange = (value: number[]) => {
+    setRoundCount(value[0]);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
+      <div className="w-full max-w-md flex justify-center mb-6">
+        <img 
+          src="/lovable-uploads/501e9258-6166-4427-bced-d270d6b18ec9.png" 
+          alt="Fake Artist Logo" 
+          className="h-24 object-contain"
+        />
+      </div>
+
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold text-center">Fake Artist</CardTitle>
@@ -74,26 +91,30 @@ const GameSetup: React.FC<GameSetupProps> = ({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="playerCount">Number of Players</Label>
-            <Input
+            <div className="flex justify-between mb-2">
+              <Label htmlFor="playerCount">Number of Players: {playerCount}</Label>
+            </div>
+            <Slider
               id="playerCount"
-              type="number"
-              min="3"
-              max="10"
-              value={playerCount}
-              onChange={(e) => setPlayerCount(parseInt(e.target.value) || 3)}
+              min={3}
+              max={10}
+              step={1}
+              value={[playerCount]}
+              onValueChange={handlePlayerCountChange}
             />
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="roundCount">Number of Rounds</Label>
-            <Input
+            <div className="flex justify-between mb-2">
+              <Label htmlFor="roundCount">Number of Rounds: {roundCount}</Label>
+            </div>
+            <Slider
               id="roundCount"
-              type="number"
-              min="1"
-              max="5"
-              value={roundCount}
-              onChange={(e) => setRoundCount(parseInt(e.target.value) || 1)}
+              min={1}
+              max={5}
+              step={1}
+              value={[roundCount]}
+              onValueChange={handleRoundCountChange}
             />
           </div>
 
@@ -139,12 +160,26 @@ const GameSetup: React.FC<GameSetupProps> = ({
             </Button>
           </div>
         </CardContent>
+        <CardFooter className="flex flex-col items-center text-sm text-muted-foreground pt-2">
+          <p className="flex items-center gap-1">
+            Made with ❤️ by 
+            <a 
+              href="https://twitter.com/pvnkmrksk" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center underline hover:text-primary"
+            >
+              @pvnkmrksk
+              <ExternalLink className="h-3 w-3 ml-0.5" />
+            </a>
+          </p>
+        </CardFooter>
       </Card>
       
       <MultiplayerModal
         isOpen={isShowingMultiplayerModal}
         onClose={() => setIsShowingMultiplayerModal(false)}
-        onJoinGame={handleMultiplayerConfig}
+        onConfigSubmit={handleMultiplayerConfig}
       />
     </div>
   );

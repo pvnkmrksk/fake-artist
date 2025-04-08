@@ -20,6 +20,8 @@ const Game: React.FC = () => {
   const [currentRound, setCurrentRound] = useState<number>(1);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [votes, setVotes] = useState<Record<number, number>>({});
+  const [timerDuration, setTimerDuration] = useState<number>(30); // Default 30 seconds
+  const [timerEnabled, setTimerEnabled] = useState<boolean>(false);
   const { toast } = useToast();
   const { socket, roomId, leaveRoom, joinRoom } = useSocket();
   const navigate = useNavigate();
@@ -49,6 +51,8 @@ const Game: React.FC = () => {
       if (gameState.currentRound) setCurrentRound(gameState.currentRound);
       if (gameState.strokes) setStrokes(gameState.strokes);
       if (gameState.votes) setVotes(gameState.votes);
+      if (gameState.timerDuration !== undefined) setTimerDuration(gameState.timerDuration);
+      if (gameState.timerEnabled !== undefined) setTimerEnabled(gameState.timerEnabled);
     };
 
     const handlePlayerJoined = (newPlayer: any) => {
@@ -122,6 +126,14 @@ const Game: React.FC = () => {
   const handleConfigSubmit = (newConfig: GameConfig) => {
     setConfig(newConfig);
     
+    // Set timer settings if provided in config
+    if (newConfig.timerDuration) {
+      setTimerDuration(newConfig.timerDuration);
+      setTimerEnabled(true);
+    } else {
+      setTimerEnabled(false);
+    }
+    
     if (newConfig.isMultiplayer) {
       if (newConfig.isHost && socket && roomId) {
         socket.emit('game-config', { 
@@ -135,18 +147,21 @@ const Game: React.FC = () => {
   };
 
   const handlePlayersConfigured = (configuredPlayers: Player[]) => {
-    const onlinePlayers = configuredPlayers.map(player => ({
+    // Assign imposter randomly
+    const imposterIndex = Math.floor(Math.random() * configuredPlayers.length);
+    const playersWithImposter = configuredPlayers.map((player, index) => ({
       ...player,
+      isImposter: index === imposterIndex,
       isOnline: config?.isMultiplayer || false
     }));
     
-    setPlayers(onlinePlayers);
+    setPlayers(playersWithImposter);
     setGamePhase('wordReveal');
     
     if (config?.isMultiplayer && socket && roomId && config.isHost) {
       socket.emit('players-configured', { 
         roomId, 
-        players: onlinePlayers 
+        players: playersWithImposter 
       });
     }
     
@@ -222,13 +237,22 @@ const Game: React.FC = () => {
   };
 
   const handlePlayAgain = () => {
-    setSecretWord(getRandomWord());
+    const word = getRandomWord();
+    setSecretWord(word);
     setCurrentRound(1);
     setStrokes([]);
     setVotes({});
     
-    const imposterIndex = Math.floor(Math.random() * players.length);
-    const updatedPlayers = players.map((player, index) => ({
+    // Rotate players for next game - first player becomes last
+    const rotatedPlayers = [...players];
+    const firstPlayer = rotatedPlayers.shift();
+    if (firstPlayer) {
+      rotatedPlayers.push(firstPlayer);
+    }
+    
+    // Randomly select imposter for next game
+    const imposterIndex = Math.floor(Math.random() * rotatedPlayers.length);
+    const updatedPlayers = rotatedPlayers.map((player, index) => ({
       ...player,
       isImposter: index === imposterIndex
     }));
@@ -240,13 +264,13 @@ const Game: React.FC = () => {
       socket.emit('play-again', { 
         roomId, 
         players: updatedPlayers,
-        secretWord: getRandomWord()
+        secretWord: word
       });
     }
     
     toast({
       title: "New game starting!",
-      description: "Same players, new word and roles.",
+      description: "New word and roles assigned. Player order has been rotated.",
     });
   };
 
@@ -267,7 +291,11 @@ const Game: React.FC = () => {
   return (
     <div className="min-h-screen">
       {gamePhase === 'setup' && (
-        <GameSetup onConfigSubmit={handleConfigSubmit} />
+        <GameSetup 
+          onConfigSubmit={handleConfigSubmit} 
+          initialTimerDuration={timerDuration}
+          initialTimerEnabled={timerEnabled}
+        />
       )}
       
       {gamePhase === 'playerConfig' && config && (
@@ -297,6 +325,8 @@ const Game: React.FC = () => {
           previousStrokes={strokes}
           onRoundComplete={handleRoundComplete}
           isMultiplayer={config.isMultiplayer}
+          timerEnabled={timerEnabled}
+          timerDuration={timerDuration}
         />
       )}
       
@@ -318,6 +348,7 @@ const Game: React.FC = () => {
           onPlayAgain={handlePlayAgain}
           onReturnHome={handleReturnHome}
           isMultiplayer={config?.isMultiplayer}
+          strokes={strokes} // Pass strokes to show final drawing 
         />
       )}
     </div>

@@ -1,135 +1,150 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { GameConfig } from "@/types/game";
-import { UserPlus, Users, Monitor } from 'lucide-react';
-import MultiplayerModal from './MultiplayerModal';
-import { useSocket } from '@/contexts/SocketContext';
-import { useToast } from "@/components/ui/use-toast";
+import { GameConfig } from '@/types/game';
+import MultiplayerModal from '@/components/MultiplayerModal';
+import { useNavigate } from 'react-router-dom';
 
 interface GameSetupProps {
   onConfigSubmit: (config: GameConfig) => void;
+  initialTimerDuration?: number;
+  initialTimerEnabled?: boolean;
 }
 
-const GameSetup: React.FC<GameSetupProps> = ({ onConfigSubmit }) => {
-  const [playerCount, setPlayerCount] = useState(3);
-  const [roundCount, setRoundCount] = useState(2);
-  const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
-  const [isMultiplayerGame, setIsMultiplayerGame] = useState(false);
-  const [isHost, setIsHost] = useState(false);
-  const { toast } = useToast();
-  const { roomId } = useSocket();
+const GameSetup: React.FC<GameSetupProps> = ({ 
+  onConfigSubmit,
+  initialTimerDuration = 30,
+  initialTimerEnabled = false
+}) => {
+  const [playerCount, setPlayerCount] = useState<number>(4);
+  const [roundCount, setRoundCount] = useState<number>(3);
+  const [isShowingMultiplayerModal, setIsShowingMultiplayerModal] = useState<boolean>(false);
+  const [isTimerEnabled, setIsTimerEnabled] = useState<boolean>(initialTimerEnabled);
+  const [timerDuration, setTimerDuration] = useState<number>(initialTimerDuration);
+  const navigate = useNavigate();
 
-  // Check URL for room param on page load
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    
-    if (roomParam) {
-      setShowMultiplayerModal(true);
-    }
-  }, []);
-
-  const handleStartGame = () => {
+  const handleLocalGame = () => {
     onConfigSubmit({
       playerCount,
       roundCount,
-      isMultiplayer: isMultiplayerGame,
-      isHost,
-      roomId: roomId || undefined
+      isMultiplayer: false,
+      timerEnabled: isTimerEnabled,
+      timerDuration: isTimerEnabled ? timerDuration : undefined
     });
   };
 
-  const handleMultiplayerGameStart = (isGameHost: boolean) => {
-    setIsMultiplayerGame(true);
-    setIsHost(isGameHost);
-    setShowMultiplayerModal(false);
-    
-    toast({
-      title: isGameHost ? "You're the host" : "You've joined the game",
-      description: isGameHost 
-        ? "Wait for players to join, then start the game" 
-        : "Wait for the host to start the game"
+  const handleShowMultiplayerModal = () => {
+    setIsShowingMultiplayerModal(true);
+  };
+
+  const handleMultiplayerConfig = (roomConfig: { roomId: string, isHost: boolean }) => {
+    onConfigSubmit({
+      playerCount: 0, // We'll count as players join
+      roundCount,
+      isMultiplayer: true,
+      isHost: roomConfig.isHost,
+      roomId: roomConfig.roomId,
+      timerEnabled: isTimerEnabled,
+      timerDuration: isTimerEnabled ? timerDuration : undefined
     });
+    setIsShowingMultiplayerModal(false);
+  };
+
+  const handleTimerToggle = (checked: boolean) => {
+    setIsTimerEnabled(checked);
+  };
+
+  const handleTimerDurationChange = (value: number[]) => {
+    setTimerDuration(value[0]);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
-      <Card className="w-full max-w-md animate-fade-in">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Stroke of Deception</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Fake Artist</CardTitle>
+          <CardDescription className="text-center">
+            One player doesn't know the prompt - can you guess who?
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="grid gap-2">
-              <div className="flex justify-between">
-                <Label htmlFor="players">Number of Players: {playerCount}</Label>
-              </div>
-              <Slider
-                id="players"
-                min={3}
-                max={10}
-                step={1}
-                defaultValue={[playerCount]}
-                onValueChange={(value) => setPlayerCount(value[0])}
-                disabled={isMultiplayerGame && !isHost}
+          <div className="space-y-2">
+            <Label htmlFor="playerCount">Number of Players</Label>
+            <Input
+              id="playerCount"
+              type="number"
+              min="3"
+              max="10"
+              value={playerCount}
+              onChange={(e) => setPlayerCount(parseInt(e.target.value) || 3)}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="roundCount">Number of Rounds</Label>
+            <Input
+              id="roundCount"
+              type="number"
+              min="1"
+              max="5"
+              value={roundCount}
+              onChange={(e) => setRoundCount(parseInt(e.target.value) || 1)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="timer-toggle">Enable Turn Timer</Label>
+              <Switch 
+                id="timer-toggle"
+                checked={isTimerEnabled}
+                onCheckedChange={handleTimerToggle}
               />
             </div>
             
-            <div className="grid gap-2">
-              <div className="flex justify-between">
-                <Label htmlFor="rounds">Number of Rounds: {roundCount}</Label>
+            {isTimerEnabled && (
+              <div className="pt-4">
+                <div className="flex justify-between mb-2">
+                  <span>Timer: {timerDuration} seconds</span>
+                </div>
+                <Slider
+                  min={10}
+                  max={120}
+                  step={5}
+                  value={[timerDuration]}
+                  onValueChange={handleTimerDurationChange}
+                />
               </div>
-              <Slider
-                id="rounds"
-                min={1}
-                max={5}
-                step={1}
-                defaultValue={[roundCount]}
-                onValueChange={(value) => setRoundCount(value[0])}
-                disabled={isMultiplayerGame && !isHost}
-              />
-            </div>
-
-            <div className="flex gap-4 pt-2">
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => setShowMultiplayerModal(true)}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Multiplayer
-              </Button>
-              <Button 
-                className="w-full" 
-                onClick={handleStartGame}
-                disabled={isMultiplayerGame && !isHost}
-              >
-                {isMultiplayerGame ? (
-                  <>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    {isHost ? "Start Game" : "Waiting for host..."}
-                  </>
-                ) : (
-                  <>
-                    <Monitor className="h-4 w-4 mr-2" />
-                    Play Locally
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
+          </div>
+          
+          <div className="space-y-2 pt-4">
+            <Button 
+              onClick={handleLocalGame} 
+              className="w-full"
+            >
+              Start Local Game
+            </Button>
+            <Button 
+              onClick={handleShowMultiplayerModal} 
+              variant="outline" 
+              className="w-full"
+            >
+              Play Multiplayer
+            </Button>
           </div>
         </CardContent>
       </Card>
-
+      
       <MultiplayerModal
-        isOpen={showMultiplayerModal}
-        onClose={() => setShowMultiplayerModal(false)}
-        onGameStart={handleMultiplayerGameStart}
+        isOpen={isShowingMultiplayerModal}
+        onClose={() => setIsShowingMultiplayerModal(false)}
+        onJoinGame={handleMultiplayerConfig}
       />
     </div>
   );

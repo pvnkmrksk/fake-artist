@@ -14,6 +14,8 @@ export interface GameConfig {
   isMultiplayer?: boolean;
   isHost?: boolean;
   roomId?: string;
+  timerEnabled?: boolean;
+  timerDuration?: number;
 }
 
 export interface Stroke {
@@ -48,4 +50,7 @@ export interface GameRoom {
   currentPhase: GamePhase;
   secretWord?: string;
   strokes: Stroke[];
+  votes?: Record<number, number>;
+  timerEnabled?: boolean;
+  timerDuration?: number;
 }

@@ -4,9 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Player, Stroke, DrawingAction } from '@/types/game';
 import { Undo2, Check, ArrowRight } from 'lucide-react';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { useSocket } from "@/contexts/SocketContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Badge } from "@/components/ui/badge";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Separator } from "@/components/ui/separator";
+import DrawingTimer from "@/components/DrawingTimer";
 
 interface DrawingCanvasProps {
   players: Player[];
@@ -16,6 +20,8 @@ interface DrawingCanvasProps {
   previousStrokes?: Stroke[];
   onRoundComplete: (strokes: Stroke[]) => void;
   isMultiplayer?: boolean;
+  timerEnabled?: boolean;
+  timerDuration?: number;
 }
 
 const STROKE_WIDTH = 4;
@@ -37,31 +43,37 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   secretWord,
   previousStrokes = [],
   onRoundComplete,
-  isMultiplayer = false
+  isMultiplayer = false,
+  timerEnabled = false,
+  timerDuration = 30
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [currentPlayerStrokes, setCurrentPlayerStrokes] = useState<Stroke[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
+  const [showSecretWord, setShowSecretWord] = useState(false);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  
   const { socket, roomId } = useSocket();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
   const currentPlayer = players[currentPlayerIndex];
+  const isCurrentPlayerImposter = currentPlayer?.isImposter || false;
   
   // Set up responsiveness based on container size
   useEffect(() => {
     const updateCanvasSize = () => {
-      const container = document.querySelector('.canvas-container');
+      const container = containerRef.current;
       if (container) {
-        // For desktop, use a max width
+        // For desktop, use a max width with aspect ratio
         // For mobile, use full width minus padding
-        const width = isMobile 
-          ? Math.min(window.innerWidth - 40, CANVAS_WIDTH)
-          : Math.min(container.clientWidth - 20, CANVAS_WIDTH);
+        const maxWidth = isMobile ? window.innerWidth - 40 : 500;
+        const width = Math.min(container.clientWidth - 20, maxWidth);
           
         setCanvasSize({
           width,
@@ -74,6 +86,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     window.addEventListener('resize', updateCanvasSize);
     return () => window.removeEventListener('resize', updateCanvasSize);
   }, [isMobile]);
+
+  // Toggle secret word visibility
+  useEffect(() => {
+    // Only show the secret word when not actively drawing
+    setShowSecretWord(!isDrawing);
+  }, [isDrawing]);
 
   // Reset canvas and state for new round
   useEffect(() => {
@@ -99,7 +117,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setStrokes([]);
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
-  }, [currentRound, previousStrokes]);
+    
+    // Start timer for first player if enabled
+    if (timerEnabled) {
+      setIsTimerActive(true);
+    }
+  }, [currentRound, previousStrokes, timerEnabled]);
 
   // Set up multiplayer drawing socket listeners
   useEffect(() => {
@@ -325,12 +348,12 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handleUndo = () => {
-    // Clear all strokes for the current player
+    // Clear all strokes for the current player - improved to take effect immediately
     setCurrentPlayerStrokes([]);
     setCurrentStroke(null);
     setIsDrawing(false);
     
-    // Redraw canvas without current player's strokes
+    // Redraw canvas without current player's strokes - happens immediately
     redrawCanvas(strokes);
   };
 
@@ -343,6 +366,9 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       });
       return;
     }
+    
+    // Stop the timer
+    setIsTimerActive(false);
     
     // Add all of the current player's strokes to the main strokes array
     const updatedStrokes = [...strokes, ...currentPlayerStrokes];
@@ -363,20 +389,83 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Advance to the next player or end the round
     if (currentPlayerIndex < players.length - 1) {
-      setCurrentPlayerIndex(currentPlayerIndex + 1);
+      const nextPlayerIndex = currentPlayerIndex + 1;
+      setCurrentPlayerIndex(nextPlayerIndex);
+      
+      // Start timer for next player if enabled
+      if (timerEnabled) {
+        setTimeout(() => setIsTimerActive(true), 500);
+      }
     } else {
       // All players have drawn, end the round
       onRoundComplete(updatedStrokes);
     }
   };
 
+  // Handler for when timer expires
+  const handleTimeExpired = () => {
+    toast({
+      title: "Time's up!",
+      description: "Your turn has ended."
+    });
+    
+    // If player has drawn something, confirm it
+    if (currentPlayerStrokes.length > 0) {
+      handleConfirmStroke();
+    } else {
+      // If player hasn't drawn anything, add a small dot
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const context = canvas.getContext('2d');
+        if (context) {
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          
+          const dummyStroke: Stroke = {
+            points: [
+              { x: centerX, y: centerY },
+              { x: centerX + 1, y: centerY + 1 }
+            ],
+            color: getPlayerColor(currentPlayer.colorIndex),
+            width: STROKE_WIDTH,
+            playerId: currentPlayer.id
+          };
+          
+          setCurrentPlayerStrokes([dummyStroke]);
+          setTimeout(() => handleConfirmStroke(), 100);
+        }
+      }
+    }
+  };
+
+  // Color legend component
+  const ColorLegend = () => (
+    <div className="mt-4 p-3 bg-card rounded-md border shadow-sm">
+      <h3 className="text-sm font-medium mb-2">Players</h3>
+      <div className="flex flex-wrap gap-2">
+        {players.map((player) => (
+          <div key={player.id} className="flex items-center">
+            <div 
+              className="h-4 w-4 rounded-full mr-1"
+              style={{ backgroundColor: getPlayerColor(player.colorIndex) }}
+            />
+            <span className="text-xs">
+              {player.name}
+              {player.id === currentPlayer.id && " (drawing)"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
       <div className="w-full max-w-md">
         <div className="mb-4 flex justify-between items-center">
           <div>
             <span className="font-medium">Round {currentRound} of {totalRounds}</span>
-            {!currentPlayer.isImposter && (
+            {showSecretWord && !isCurrentPlayerImposter && (
               <p className="text-sm text-muted-foreground">Word: {secretWord}</p>
             )}
           </div>
@@ -394,25 +483,41 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </div>
         </div>
         
-        <div className="bg-white rounded-lg shadow-md overflow-hidden canvas-container">
-          <canvas
-            ref={canvasRef}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            className="drawing-canvas border border-gray-200 touch-none bg-white"
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={endDrawing}
-            onMouseLeave={endDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={endDrawing}
-            style={{
-              width: `${canvasSize.width}px`,
-              height: `${canvasSize.height}px`
-            }}
-          />
+        {/* Timer (if enabled) */}
+        {timerEnabled && (
+          <div className="mb-4">
+            <DrawingTimer 
+              durationSeconds={timerDuration}
+              isActive={isTimerActive}
+              onTimeExpired={handleTimeExpired}
+            />
+          </div>
+        )}
+        
+        <div className="bg-white rounded-lg shadow-md overflow-hidden" ref={containerRef}>
+          <AspectRatio ratio={1 / 1} className="bg-white">
+            <canvas
+              ref={canvasRef}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              className="drawing-canvas border border-gray-200 touch-none bg-white"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={endDrawing}
+              onMouseLeave={endDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={endDrawing}
+              style={{
+                width: '100%',
+                height: '100%'
+              }}
+            />
+          </AspectRatio>
         </div>
+
+        {/* Color legend - always visible */}
+        <ColorLegend />
         
         <div className="mt-4 flex justify-between">
           <Button

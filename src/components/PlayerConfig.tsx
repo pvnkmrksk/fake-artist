@@ -54,12 +54,13 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({
   };
 
   const handleAddPlayer = () => {
-    if (!currentPlayerName.trim()) {
-      setError("Please enter a name");
-      return;
+    // Use default name if nothing is entered
+    let finalName = currentPlayerName.trim();
+    if (!finalName) {
+      finalName = getRandomName();
     }
 
-    if (players.some(p => p.name === currentPlayerName.trim())) {
+    if (players.some(p => p.name === finalName)) {
       setError("This name is already taken");
       return;
     }
@@ -67,7 +68,7 @@ const PlayerConfig: React.FC<PlayerConfigProps> = ({
     const updatedPlayers = [...players];
     updatedPlayers[currentPlayerIndex] = {
       ...updatedPlayers[currentPlayerIndex],
-      name: currentPlayerName.trim(),
+      name: finalName,
     };
 
     setPlayers(updatedPlayers);

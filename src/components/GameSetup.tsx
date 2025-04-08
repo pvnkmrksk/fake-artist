@@ -9,7 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { GameConfig } from '@/types/game';
 import MultiplayerModal from '@/components/MultiplayerModal';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink } from 'lucide-react';
+import Footer from '@/components/Footer';
 
 interface GameSetupProps {
   onConfigSubmit: (config: GameConfig) => void;
@@ -78,7 +78,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         <img 
           src="/lovable-uploads/501e9258-6166-4427-bced-d270d6b18ec9.png" 
           alt="Fake Artist Logo" 
-          className="h-24 object-contain"
+          className="h-32 object-contain" // Increased from h-24 to h-32
         />
       </div>
 
@@ -160,21 +160,11 @@ const GameSetup: React.FC<GameSetupProps> = ({
             </Button>
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col items-center text-sm text-muted-foreground pt-2">
-          <p className="flex items-center gap-1">
-            Made with ❤️ by 
-            <a 
-              href="https://twitter.com/pvnkmrksk" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center underline hover:text-primary"
-            >
-              @pvnkmrksk
-              <ExternalLink className="h-3 w-3 ml-0.5" />
-            </a>
-          </p>
-        </CardFooter>
       </Card>
+      
+      <div className="mt-6">
+        <Footer />
+      </div>
       
       <MultiplayerModal
         isOpen={isShowingMultiplayerModal}

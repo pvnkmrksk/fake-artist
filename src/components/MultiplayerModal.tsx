@@ -1,268 +1,158 @@
 
-import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { useSocket } from "@/contexts/SocketContext";
-import { Copy, Share2, Loader2, RefreshCw, UserPlus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { useSocket } from '@/contexts/SocketContext';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
-interface MultiplayerModalProps {
+export interface MultiplayerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onGameStart: (isHost: boolean) => void;
+  onConfigSubmit: (roomConfig: { roomId: string; isHost: boolean }) => void;
 }
 
-const MultiplayerModal: React.FC<MultiplayerModalProps> = ({ 
-  isOpen, 
+const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
+  isOpen,
   onClose,
-  onGameStart 
+  onConfigSubmit
 }) => {
+  const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
+  const [roomCode, setRoomCode] = useState<string>('');
+  const { createRoom, joinRoom, isConnecting } = useSocket();
   const { toast } = useToast();
-  const { createRoom, joinRoom, roomId, isConnecting, isConnected } = useSocket();
-  const [joinRoomId, setJoinRoomId] = useState("");
-  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
-  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
-  const [activeTab, setActiveTab] = useState('create');
-
-  // Check URL for room parameter on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    
-    if (roomParam) {
-      console.log("Found room param in URL:", roomParam);
-      setJoinRoomId(roomParam.toUpperCase());
-      setActiveTab('join');
-      
-      // Auto-join if room code is provided in URL and we're connected
-      if (isConnected && roomParam.length === 6) {
-        console.log("Auto-joining room from URL parameter");
-        handleJoinRoom(roomParam.toUpperCase());
-      }
-    }
-  }, [isConnected]);
 
   const handleCreateRoom = async () => {
     try {
-      setIsCreatingRoom(true);
-      const newRoomId = await createRoom();
+      const roomId = await createRoom();
+      onConfigSubmit({ roomId, isHost: true });
+    } catch (err) {
+      console.error("Failed to create room:", err);
       toast({
-        title: "Room created!",
-        description: `Your room code is: ${newRoomId}`,
+        title: "Room Creation Failed",
+        description: "Could not create a room. Please try again.",
+        variant: "destructive",
       });
-    } catch (error) {
-      console.error("Error creating room:", error);
-      toast({
-        title: "Error creating room",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-    } finally {
-      setIsCreatingRoom(false);
     }
   };
 
-  const handleJoinRoom = async (roomIdToJoin = joinRoomId) => {
-    if (!roomIdToJoin.trim()) {
+  const handleJoinRoom = async () => {
+    if (roomCode.length !== 6) {
       toast({
-        title: "Room code required",
-        description: "Please enter a valid room code",
-        variant: "destructive"
+        title: "Invalid Room Code",
+        description: "Room code must be 6 characters",
+        variant: "destructive",
       });
       return;
     }
 
     try {
-      setIsJoiningRoom(true);
-      console.log("Attempting to join room:", roomIdToJoin);
-      const success = await joinRoom(roomIdToJoin.trim());
-      
+      const success = await joinRoom(roomCode);
       if (success) {
-        toast({
-          title: "Joined successfully!",
-          description: `You've joined room: ${roomIdToJoin}`,
-        });
-        onGameStart(false); // Start as player (not host)
-        onClose(); // Close the modal after successful join
-      } else {
-        toast({
-          title: "Could not join room",
-          description: "Room may not exist or is full",
-          variant: "destructive"
-        });
+        onConfigSubmit({ roomId: roomCode, isHost: false });
       }
-    } catch (error) {
-      console.error("Error joining room:", error);
+    } catch (err) {
+      console.error("Failed to join room:", err);
       toast({
-        title: "Error joining room",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-    } finally {
-      setIsJoiningRoom(false);
-    }
-  };
-
-  const copyRoomLink = () => {
-    if (roomId) {
-      const roomLink = `${window.location.origin}/?room=${roomId}`;
-      navigator.clipboard.writeText(roomLink);
-      toast({
-        title: "Link copied",
-        description: "Share this link with friends to join your game",
+        title: "Join Failed",
+        description: "Could not join the room. Please check the code and try again.",
+        variant: "destructive",
       });
     }
   };
 
-  const shareRoomLink = async () => {
-    if (roomId && navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join my game room',
-          text: `Join my game with room code: ${roomId}`,
-          url: `${window.location.origin}/?room=${roomId}`
-        });
-      } catch (error) {
-        console.error("Error sharing:", error);
-        // Fallback to copy
-        copyRoomLink();
-      }
-    } else {
-      // Fallback to copy if Web Share API is not available
-      copyRoomLink();
-    }
+  const handleRoomCodeChange = (value: string) => {
+    setRoomCode(value);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Play Multiplayer</DialogTitle>
+          <DialogTitle>Multiplayer Game</DialogTitle>
           <DialogDescription>
-            Create a new room or join an existing game.
+            Join an existing game or create a new room
           </DialogDescription>
         </DialogHeader>
-        
-        <Tabs 
-          value={activeTab} 
-          onValueChange={setActiveTab}
-          className="w-full"
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="create">Create Room</TabsTrigger>
-            <TabsTrigger value="join">Join Room</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="create" className="pt-4 pb-2">
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                Create a new room and invite friends to play together.
-              </p>
-              {roomId ? (
-                <>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 p-2 border rounded bg-muted font-mono text-center">
-                        {roomId}
-                      </div>
-                      <Button variant="outline" size="icon" onClick={copyRoomLink}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" onClick={shareRoomLink}>
-                        <Share2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Share this room code with friends so they can join
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">1 player connected</Badge>
-                    <Badge variant="outline" className="ml-auto">You (Host)</Badge>
-                  </div>
-                  <Button className="w-full" onClick={() => {
-                    onGameStart(true);
-                    onClose(); // Also close the modal
-                  }}>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Start Game as Host
-                  </Button>
-                </>
-              ) : (
-                <Button 
-                  onClick={handleCreateRoom} 
-                  disabled={isCreatingRoom || isConnecting || !isConnected}
-                  className="w-full"
-                >
-                  {(isCreatingRoom || isConnecting) ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {isCreatingRoom ? "Creating..." : "Connecting..."}
-                    </>
-                  ) : !isConnected ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Connecting to server...
-                    </>
-                  ) : (
-                    "Create New Room"
-                  )}
-                </Button>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="join" className="pt-4 pb-2">
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                Enter a room code to join an existing game.
-              </p>
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="Enter room code" 
-                  value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+
+        <div className="flex flex-col space-y-6 pt-4">
+          <div className="flex w-full rounded-lg overflow-hidden">
+            <Button
+              variant={activeTab === 'join' ? "default" : "outline"}
+              className="flex-1 rounded-none"
+              onClick={() => setActiveTab('join')}
+            >
+              Join Room
+            </Button>
+            <Button
+              variant={activeTab === 'create' ? "default" : "outline"}
+              className="flex-1 rounded-none"
+              onClick={() => setActiveTab('create')}
+            >
+              Create Room
+            </Button>
+          </div>
+
+          {activeTab === 'join' ? (
+            <div className="space-y-4">
+              <div className="flex flex-col items-center justify-center text-center space-y-3">
+                <div className="text-sm font-medium">
+                  Enter the 6-character room code
+                </div>
+                <InputOTP
                   maxLength={6}
-                  className="font-mono uppercase"
-                />
-                <Button 
-                  onClick={() => handleJoinRoom()}
-                  disabled={isJoiningRoom || isConnecting || !isConnected || !joinRoomId.trim() || joinRoomId.length !== 6}
+                  value={roomCode}
+                  onChange={handleRoomCodeChange}
+                  className="w-full"
+                  containerClassName="flex justify-center gap-1"
                 >
-                  {(isJoiningRoom || isConnecting) ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {isJoiningRoom ? "Joining..." : "Connecting..."}
-                    </>
-                  ) : (
-                    "Join"
-                  )}
-                </Button>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
               </div>
-              {!isConnected && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Waiting for server connection...
-                </p>
-              )}
+              
+              <Button 
+                className="w-full" 
+                onClick={handleJoinRoom}
+                disabled={roomCode.length !== 6 || isConnecting}
+              >
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Joining Room...
+                  </>
+                ) : (
+                  "Join Room"
+                )}
+              </Button>
             </div>
-          </TabsContent>
-        </Tabs>
-        
-        <DialogFooter className="sm:justify-start">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-        </DialogFooter>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p>Create a new room and invite friends to join</p>
+              </div>
+              <Button 
+                className="w-full" 
+                onClick={handleCreateRoom}
+                disabled={isConnecting}
+              >
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Room...
+                  </>
+                ) : (
+                  "Create New Room"
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

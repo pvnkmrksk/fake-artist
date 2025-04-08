@@ -1,241 +1,277 @@
-/**
- * Socket.IO mock server for development/demo purposes
- * This simulates a socket server for testing multiplayer functionality
- */
 
-class MockSocketServer {
-  private static instance: MockSocketServer;
-  private rooms: Map<string, Set<string>> = new Map();
-  private clientToRoom: Map<string, string> = new Map();
-  private events: Map<string, Set<Function>> = new Map();
-  private clientCallbacks: Map<string, Function> = new Map();
-  // Add shared storage for persistent room info across browser sessions
-  private static persistentRooms: Set<string> = new Set();
+interface RoomData {
+  id: string;
+  clients: string[];
+  host: string;
+  gameState?: any;
+}
 
-  private constructor() {
+class SocketServer {
+  private rooms: Map<string, RoomData>;
+  private clientRooms: Map<string, string>;
+  private eventListeners: Map<string, Array<(data: any) => void>>;
+  private callbackRegistry: Map<string, Map<string, (data: any) => void>>;
+  
+  constructor() {
+    this.rooms = new Map();
+    this.clientRooms = new Map();
+    this.eventListeners = new Map();
+    this.callbackRegistry = new Map();
     console.log("[MockSocketServer] Initialized");
+    
+    // Load any persistent rooms on initialization
+    this.loadPersistentRooms();
   }
-
-  public static getInstance(): MockSocketServer {
-    if (!MockSocketServer.instance) {
-      MockSocketServer.instance = new MockSocketServer();
+  
+  // Generate a random 6-character room ID
+  private generateRoomId(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789'; // No O, 0, I to avoid confusion
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return MockSocketServer.instance;
+    return result;
   }
-
-  // Generate a random room ID
-  generateRoomId(): string {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  }
-
+  
   // Create a new room
-  createRoom(clientId: string): string {
+  public createRoom(clientId: string): string {
     const roomId = this.generateRoomId();
-    this.rooms.set(roomId, new Set([clientId]));
-    this.clientToRoom.set(clientId, roomId);
-    // Add to persistent rooms for cross-browser access
-    MockSocketServer.persistentRooms.add(roomId);
     
-    console.log(`[MockSocketServer] Room ${roomId} created by ${clientId}`);
-    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
+    this.rooms.set(roomId, {
+      id: roomId,
+      clients: [clientId],
+      host: clientId
+    });
     
-    // Save to localStorage for cross-browser persistence
-    try {
-      localStorage.setItem('mock_socket_rooms', JSON.stringify(Array.from(MockSocketServer.persistentRooms)));
-    } catch (e) {
-      console.error("[MockSocketServer] Failed to save rooms to localStorage:", e);
-    }
+    this.clientRooms.set(clientId, roomId);
     
-    // Trigger a game event to notify clients
-    this.triggerEvent('room-created', { roomId, clientId });
+    console.log(`[MockSocketServer] Room ${roomId} created by client ${clientId}`);
+    
+    // Save rooms to localStorage for persistence
+    this.saveRoomsToStorage();
     
     return roomId;
   }
-
-  // Register a client callback for later execution
-  registerCallback(clientId: string, event: string, callback: Function): void {
-    const key = `${clientId}:${event}`;
-    this.clientCallbacks.set(key, callback);
-  }
   
-  // Execute a registered callback for a client
-  executeCallback(clientId: string, event: string, ...args: any[]): void {
-    const key = `${clientId}:${event}`;
-    const callback = this.clientCallbacks.get(key);
-    if (callback) {
-      console.log(`[MockSocketServer] Executing callback for ${clientId} on ${event}`);
-      setTimeout(() => {
-        try {
-          callback(...args);
-        } catch (error) {
-          console.error(`[MockSocketServer] Error executing callback:`, error);
-        }
-      }, 100); // Small delay to simulate network latency
-      this.clientCallbacks.delete(key);
-    }
-  }
-
-  // Try to load persistent rooms from localStorage
-  loadPersistentRooms(): void {
-    try {
-      const storedRooms = localStorage.getItem('mock_socket_rooms');
-      if (storedRooms) {
-        const roomsArray = JSON.parse(storedRooms);
-        MockSocketServer.persistentRooms = new Set(roomsArray);
-        console.log(`[MockSocketServer] Loaded persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
-      }
-    } catch (e) {
-      console.error("[MockSocketServer] Failed to load rooms from localStorage:", e);
-    }
-  }
-
   // Join an existing room
-  joinRoom(clientId: string, roomId: string): boolean {
-    // Load rooms from localStorage first to catch any newly created rooms
-    this.loadPersistentRooms();
-    
-    console.log(`[MockSocketServer] Attempting to join room ${roomId} by client ${clientId}`);
-    console.log(`[MockSocketServer] Available rooms: ${Array.from(this.rooms.keys())}`);
-    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
-    
-    // Room must exist in our persistent store
-    if (!MockSocketServer.persistentRooms.has(roomId)) {
-      console.log(`[MockSocketServer] Room ${roomId} doesn't exist in persistent storage`);
+  public joinRoom(clientId: string, roomId: string): boolean {
+    // First check if the room exists
+    if (!this.rooms.has(roomId)) {
+      console.log(`[MockSocketServer] Room ${roomId} does not exist`);
       return false;
     }
-
-    // If room exists in persistent storage but not in memory, recreate it
-    if (!this.rooms.has(roomId)) {
-      console.log(`[MockSocketServer] Recreating room ${roomId} from persistent storage`);
-      this.rooms.set(roomId, new Set());
-    }
-
+    
+    // Then check if the client is already in the room
     const room = this.rooms.get(roomId)!;
     
-    // Check if client is already in a room, if so, leave it
-    this.leaveCurrentRoom(clientId);
+    if (room.clients.includes(clientId)) {
+      console.log(`[MockSocketServer] Client ${clientId} is already in room ${roomId}`);
+      return true;
+    }
     
-    // Add client to room
-    room.add(clientId);
-    this.clientToRoom.set(clientId, roomId);
+    // Check if the room is full (max 10 players)
+    if (room.clients.length >= 10) {
+      console.log(`[MockSocketServer] Room ${roomId} is full`);
+      return false;
+    }
+    
+    // Add the client to the room
+    room.clients.push(clientId);
+    this.clientRooms.set(clientId, roomId);
+    
     console.log(`[MockSocketServer] Client ${clientId} joined room ${roomId}`);
-    console.log(`[MockSocketServer] Room ${roomId} now has ${room.size} clients`);
     
-    // Trigger a game event to notify clients
-    this.triggerEvent('player-joined', { roomId, clientId });
+    // Notify other clients in the room
+    this.emit('player-joined', {
+      roomId,
+      clientId,
+      totalPlayers: room.clients.length
+    });
+    
+    // Save updated room state to localStorage
+    this.saveRoomsToStorage();
     
     return true;
   }
-
-  // Leave current room if client is in one
-  leaveCurrentRoom(clientId: string): void {
-    const currentRoomId = this.clientToRoom.get(clientId);
-    if (currentRoomId) {
-      this.leaveRoom(clientId);
-    }
-  }
-
+  
   // Leave a room
-  leaveRoom(clientId: string): void {
-    const roomId = this.clientToRoom.get(clientId);
-    if (!roomId) return;
-
-    const room = this.rooms.get(roomId);
-    if (room) {
-      room.delete(clientId);
-      
-      // Trigger event before potentially deleting the room
-      this.triggerEvent('player-left', { roomId, clientId });
-      
-      if (room.size === 0) {
-        this.rooms.delete(roomId);
-        console.log(`[MockSocketServer] Room ${roomId} deleted from memory (empty)`);
-        // Note: We're keeping it in persistentRooms to allow rejoining
-      }
+  public leaveRoom(clientId: string): void {
+    const roomId = this.clientRooms.get(clientId);
+    
+    if (!roomId || !this.rooms.has(roomId)) {
+      return;
     }
-    this.clientToRoom.delete(clientId);
+    
+    const room = this.rooms.get(roomId)!;
+    
+    // Remove the client from the room
+    room.clients = room.clients.filter(id => id !== clientId);
+    this.clientRooms.delete(clientId);
+    
     console.log(`[MockSocketServer] Client ${clientId} left room ${roomId}`);
-  }
-
-  // Get all clients in a room
-  getClientsInRoom(roomId: string): string[] {
-    const room = this.rooms.get(roomId);
-    if (!room) return [];
-    return Array.from(room);
-  }
-  
-  // Broadcast a message to all clients in a room
-  broadcastToRoom(roomId: string, eventName: string, data: any): void {
-    const clients = this.getClientsInRoom(roomId);
-    if (clients.length === 0) return;
     
-    console.log(`[MockSocketServer] Broadcasting ${eventName} to room ${roomId}`);
-    this.triggerEvent(`room:${roomId}:${eventName}`, data);
-  }
-  
-  // Register for server events
-  on(eventName: string, callback: Function): void {
-    if (!this.events.has(eventName)) {
-      this.events.set(eventName, new Set());
+    // Notify other clients
+    this.emit('player-left', {
+      roomId,
+      clientId,
+      totalPlayers: room.clients.length
+    });
+    
+    // If the room is now empty, remove it
+    if (room.clients.length === 0) {
+      this.rooms.delete(roomId);
+      console.log(`[MockSocketServer] Room ${roomId} removed (empty)`);
+    } 
+    // If the host left, assign a new host
+    else if (room.host === clientId && room.clients.length > 0) {
+      room.host = room.clients[0];
+      console.log(`[MockSocketServer] New host for room ${roomId}: ${room.host}`);
     }
-    this.events.get(eventName)!.add(callback);
-  }
-  
-  // Trigger a server event
-  triggerEvent(eventName: string, data: any): void {
-    const callbacks = this.events.get(eventName);
-    if (!callbacks) return;
     
-    callbacks.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error(`[MockSocketServer] Error in event handler for ${eventName}:`, error);
-      }
-    });
-  }
-
-  // Debug info
-  logServerState(): void {
-    console.log(`[MockSocketServer] Active rooms: ${this.rooms.size}`);
-    this.rooms.forEach((clients, roomId) => {
-      console.log(`[MockSocketServer] Room ${roomId}: ${clients.size} clients`);
-    });
-    console.log(`[MockSocketServer] Persistent rooms: ${Array.from(MockSocketServer.persistentRooms)}`);
-  }
-  
-  // Get room ID for a client (public accessor method)
-  getRoomForClient(clientId: string): string | undefined {
-    return this.clientToRoom.get(clientId);
+    // Save updated room state to localStorage
+    this.saveRoomsToStorage();
   }
   
   // Check if a room exists
-  roomExists(roomId: string): boolean {
-    // First try to load from localStorage
-    this.loadPersistentRooms();
-    // Check both in-memory rooms and persistent rooms
-    return this.rooms.has(roomId) || MockSocketServer.persistentRooms.has(roomId);
+  public roomExists(roomId: string): boolean {
+    return this.rooms.has(roomId);
   }
   
-  // For testing only: clear all room data
-  clearAllRooms(): void {
-    this.rooms.clear();
-    this.clientToRoom.clear();
-    MockSocketServer.persistentRooms.clear();
-    
-    // Also clear from localStorage
-    try {
-      localStorage.removeItem('mock_socket_rooms');
-    } catch (e) {
-      console.error("[MockSocketServer] Failed to clear rooms from localStorage:", e);
+  // Get the room ID for a client
+  public getRoomForClient(clientId: string): string | undefined {
+    return this.clientRooms.get(clientId);
+  }
+  
+  // Get all clients in a room
+  public getClientsInRoom(roomId: string): string[] {
+    if (!this.rooms.has(roomId)) {
+      return [];
     }
     
-    console.log("[MockSocketServer] All rooms cleared");
+    return [...this.rooms.get(roomId)!.clients];
+  }
+  
+  // Store callback for future execution
+  public registerCallback(clientId: string, event: string, callback: (data: any) => void) {
+    if (!this.callbackRegistry.has(clientId)) {
+      this.callbackRegistry.set(clientId, new Map());
+    }
+    
+    this.callbackRegistry.get(clientId)!.set(event, callback);
+  }
+  
+  // Execute stored callback
+  public executeCallback(clientId: string, event: string, data: any) {
+    if (!this.callbackRegistry.has(clientId) || !this.callbackRegistry.get(clientId)!.has(event)) {
+      return;
+    }
+    
+    const callback = this.callbackRegistry.get(clientId)!.get(event)!;
+    callback(data);
+    
+    // Remove the callback after execution
+    this.callbackRegistry.get(clientId)!.delete(event);
+  }
+  
+  // Broadcast to all clients in a room
+  public broadcastToRoom(roomId: string, event: string, data: any) {
+    if (!this.rooms.has(roomId)) {
+      return;
+    }
+    
+    console.log(`[MockSocketServer] Broadcasting ${event} to room ${roomId}`, data);
+    
+    // Also broadcast on the room-specific event channel
+    this.emit(`room:${roomId}:${event}`, data);
+  }
+  
+  // Register event listener
+  public on(event: string, handler: (data: any) => void) {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, []);
+    }
+    
+    this.eventListeners.get(event)!.push(handler);
+    return this;
+  }
+  
+  // Emit event to all listeners
+  public emit(event: string, data: any) {
+    // Handle wildcards for room-specific events
+    if (event.includes('*')) {
+      const prefix = event.split('*')[0];
+      const suffix = event.split('*')[1];
+      
+      for (const [listenerEvent, handlers] of this.eventListeners.entries()) {
+        if (listenerEvent.startsWith(prefix) && listenerEvent.endsWith(suffix)) {
+          handlers.forEach(handler => handler(data));
+        }
+      }
+    } else if (this.eventListeners.has(event)) {
+      this.eventListeners.get(event)!.forEach(handler => handler(data));
+    }
+  }
+  
+  // Save rooms to localStorage for persistence between page reloads
+  private saveRoomsToStorage() {
+    try {
+      const roomsData = Array.from(this.rooms.entries()).map(([id, room]) => ({
+        id,
+        clients: room.clients,
+        host: room.host,
+        gameState: room.gameState
+      }));
+      
+      localStorage.setItem('mockSocketRooms', JSON.stringify(roomsData));
+      console.log(`[MockSocketServer] Saved ${roomsData.length} rooms to localStorage`);
+    } catch (err) {
+      console.error('[MockSocketServer] Error saving rooms to localStorage', err);
+    }
+  }
+  
+  // Load rooms from localStorage
+  public loadPersistentRooms() {
+    try {
+      const storedRooms = localStorage.getItem('mockSocketRooms');
+      
+      if (storedRooms) {
+        const roomsData = JSON.parse(storedRooms);
+        
+        // Clear existing rooms first
+        this.rooms.clear();
+        
+        // Add stored rooms
+        for (const room of roomsData) {
+          this.rooms.set(room.id, {
+            id: room.id,
+            clients: room.clients,
+            host: room.host,
+            gameState: room.gameState
+          });
+          
+          // Update client room mappings
+          for (const clientId of room.clients) {
+            this.clientRooms.set(clientId, room.id);
+          }
+        }
+        
+        console.log(`[MockSocketServer] Loaded persistent rooms: ${Array.from(this.rooms.keys()).join(', ')}`);
+      }
+    } catch (err) {
+      console.error('[MockSocketServer] Error loading rooms from localStorage', err);
+    }
+  }
+  
+  // Debug method to clear all rooms
+  public clearAllRooms() {
+    this.rooms.clear();
+    this.clientRooms.clear();
+    localStorage.removeItem('mockSocketRooms');
+    console.log('[MockSocketServer] All rooms cleared');
   }
 }
 
-// Load persistent rooms on initial import
-const server = MockSocketServer.getInstance();
-server.loadPersistentRooms();
+// Create a single instance of the server
+const mockSocketServer = new SocketServer();
 
-export default server;
+export default mockSocketServer;

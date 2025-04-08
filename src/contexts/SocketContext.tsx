@@ -56,12 +56,15 @@ const createMockSocket = () => {
           mockSocketServer.registerCallback(id, 'join-room', callback);
           console.log(`[MockSocket] Attempting to join room ${roomId} with client ${id}`);
           
+          // Clear any old room data first to prevent stale connections
+          mockSocketServer.leaveRoom(id);
+          
           // Ensure the server loads the latest rooms from localStorage
           mockSocketServer.loadPersistentRooms();
           
           const success = mockSocketServer.joinRoom(id, roomId);
           setTimeout(() => {
-            console.log(`[MockSocket] Join room result for ${roomId}: ${success}`);
+            console.log(`[MockSocket] Join room result for ${roomId}: ${success ? "success" : "failed"}`);
             mockSocketServer.executeCallback(id, 'join-room', success);
           }, 300);
         }
@@ -145,6 +148,7 @@ interface SocketContextType {
   joinRoom: (roomId: string) => Promise<boolean>;
   leaveRoom: () => void;
   isConnecting: boolean;
+  debugResetRooms: () => void; // Added for debugging purposes
 }
 
 export const SocketContext = createContext<SocketContextType>({
@@ -155,6 +159,7 @@ export const SocketContext = createContext<SocketContextType>({
   joinRoom: async () => false,
   leaveRoom: () => {},
   isConnecting: false,
+  debugResetRooms: () => {}
 });
 
 export const useSocket = () => useContext(SocketContext);
@@ -251,6 +256,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!socket) throw new Error('Socket not connected');
     setIsConnecting(true);
     
+    // Clear any existing room first
+    if (roomId) {
+      leaveRoom();
+    }
+    
     // Validate room format before trying to join
     if (!roomToJoin || roomToJoin.length !== 6) {
       setIsConnecting(false);
@@ -264,7 +274,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     console.log(`[SocketContext] Checking if room ${roomToJoin} exists...`);
     
-    // Ensure the server loads the latest rooms from localStorage
+    // Force reload room data from localStorage
     mockSocketServer.loadPersistentRooms();
     
     // Pre-check if room exists to provide better feedback
@@ -342,6 +352,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
   
+  // Debug function to reset all rooms (for testing)
+  const debugResetRooms = () => {
+    mockSocketServer.clearAllRooms();
+    setRoomId(null);
+    toast({
+      title: "Debug: Rooms Reset",
+      description: "All multiplayer rooms have been cleared",
+    });
+  };
+  
   const value = {
     socket,
     isConnected,
@@ -349,7 +369,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     createRoom,
     joinRoom,
     leaveRoom,
-    isConnecting
+    isConnecting,
+    debugResetRooms
   };
 
   return (

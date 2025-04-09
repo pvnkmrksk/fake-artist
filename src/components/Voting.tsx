@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -246,52 +245,52 @@ const Voting: React.FC<VotingProps> = ({
           
           {/* Display the final drawing */}
           <div className="mb-4">
-            <p className="text-sm mb-2">The word was: <strong>{secretWord}</strong></p>
             <div ref={containerRef} className="bg-white border rounded-md overflow-hidden">
               <AspectRatio ratio={1/1}>
                 <canvas
                   ref={canvasRef}
                   width={canvasSize.width}
                   height={canvasSize.height}
-                  className="w-full h-full"
+                  className="w-full h-full" 
+                  style={{ transformOrigin: 'center', transform: 'scale(0.95)' }}
                 />
               </AspectRatio>
             </div>
             
-            {/* Player color legend */}
-            <div className="mt-3">
+            <div className="mt-4">
               <PlayerColorLegend players={players} />
             </div>
           </div>
-          
-          <div className="flex flex-col gap-2">
-            {players.map((player) => (
-              <Button
-                key={player.id}
-                variant={selectedPlayerId === player.id ? "default" : "outline"}
-                onClick={() => !hasCurrentPlayerVoted && setSelectedPlayerId(player.id)}
-                disabled={hasCurrentPlayerVoted}
-                className="flex justify-between items-center"
-              >
-                <div className="flex items-center">
-                  <div className={`h-4 w-4 rounded-full mr-2 player-color-${player.colorIndex}`}></div>
+
+          {/* Players list to vote for */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {players.map(player => (
+                <Button
+                  key={player.id}
+                  variant={selectedPlayerId === player.id ? "default" : "outline"}
+                  className={`flex items-center justify-start gap-2 ${
+                    selectedPlayerId === player.id ? "bg-primary text-primary-foreground" : ""
+                  }`}
+                  onClick={() => setSelectedPlayerId(player.id)}
+                >
+                  <div 
+                    className="h-4 w-4 rounded-full" 
+                    style={{ backgroundColor: players.find(p => p.id === player.id)?.color || "#ccc" }}
+                  />
                   <span>{player.name}</span>
-                </div>
-                {votes[player.id] > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {votes[player.id]} {votes[player.id] === 1 ? 'vote' : 'votes'}
-                  </Badge>
-                )}
-              </Button>
-            ))}
+                </Button>
+              ))}
+            </div>
+            
+            <Button
+              className="w-full"
+              onClick={handleVote}
+              disabled={selectedPlayerId === null || hasCurrentPlayerVoted}
+            >
+              {hasCurrentPlayerVoted ? "Vote submitted" : "Submit Vote"}
+            </Button>
           </div>
-          <Button 
-            onClick={handleVote} 
-            disabled={selectedPlayerId === null || hasCurrentPlayerVoted} 
-            className="w-full"
-          >
-            {hasCurrentPlayerVoted ? "Vote Recorded" : "Submit Vote"}
-          </Button>
           
           {playersWhoVoted.size > 0 && (
             <p className="text-sm text-center text-muted-foreground">

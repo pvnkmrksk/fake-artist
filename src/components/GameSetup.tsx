@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,12 +76,14 @@ const GameSetup: React.FC<GameSetupProps> = ({
           alt="Kaun Artist Logo" 
           className="h-40 object-contain" 
         />
-        <h1 className="text-4xl font-samarkand text-primary">Kaun Artist</h1>
+        <div className="flex flex-col items-center">
+          <h1 className="text-5xl font-samarkand text-primary">Kaun</h1>
+          <h1 className="text-5xl font-samarkand text-black dark:text-white">Artist</h1>
+        </div>
       </div>
 
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Kaun Artist</CardTitle>
           <CardDescription className="text-center">
             Kaun you guess who doesn't know the prompt?
           </CardDescription>

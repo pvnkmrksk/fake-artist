@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +45,7 @@ const Results: React.FC<ResultsProps> = ({
 
   const mostVotedPlayer = players.find(p => p.id === parseInt(mostVotedPlayerId));
   
-  // Find the actual imposter
+  // Find the actual Kaun Artist
   const imposter = players.find(p => p.isImposter);
   const imposterCorrectlyIdentified = mostVotedPlayer?.isImposter;
 
@@ -127,7 +126,7 @@ const Results: React.FC<ResultsProps> = ({
           
           {imposter && (
             <div className="flex flex-col items-center bg-card p-4 rounded-lg border">
-              <p className="mb-1">The imposter was:</p>
+              <p className="mb-1">The Kaun Artist was: 🥷</p>
               <div className="flex items-center gap-2">
                 <div 
                   className="h-6 w-6 rounded-full"
@@ -151,8 +150,8 @@ const Results: React.FC<ResultsProps> = ({
               </div>
               <p className="mt-2 text-lg">
                 {imposterCorrectlyIdentified 
-                  ? "The imposter was correctly identified! 🎉" 
-                  : "The imposter fooled everyone! 😈"}
+                  ? "You caught the Kaun Artist! 🥷" 
+                  : "The Kaun Artist fooled everyone! 🥷"}
               </p>
             </div>
           )}

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,7 +106,7 @@ const WordReveal: React.FC<WordRevealProps> = ({
           >
             {isImposter ? (
               <div className="space-y-2">
-                <p className="text-xl font-bold text-destructive">You are the IMPOSTER!</p>
+                <p className="text-xl font-bold text-destructive">You are the Kaun Artist! 🥷</p>
                 <p>Try to blend in without knowing the word</p>
               </div>
             ) : (

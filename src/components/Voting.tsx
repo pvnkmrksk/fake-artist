@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { useCanvasSize } from '@/hooks/use-canvas-size';
+import PlayerColorLegend from './PlayerColorLegend';
 
 export interface VotingProps {
   players: Player[];
@@ -46,6 +47,9 @@ const Voting: React.FC<VotingProps> = ({
     const context = canvas.getContext('2d');
     if (!context) return;
 
+    // Clear canvas
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    
     // Set white background
     context.fillStyle = 'white';
     context.fillRect(0, 0, canvas.width, canvas.height);
@@ -142,9 +146,9 @@ const Voting: React.FC<VotingProps> = ({
         }, 1000);
       } else {
         // Move to next player
-        const nextPlayerIndex = players.findIndex(p => p.id === votingPlayerId) + 1;
-        if (nextPlayerIndex < players.length) {
-          setVotingPlayerId(players[nextPlayerIndex].id);
+        const currentPlayerIndex = players.findIndex(p => p.id === votingPlayerId);
+        if (currentPlayerIndex < players.length - 1) {
+          setVotingPlayerId(players[currentPlayerIndex + 1].id);
           setSelectedPlayerId(null);
         }
       }
@@ -237,13 +241,13 @@ const Voting: React.FC<VotingProps> = ({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-lg text-center">
-            Who do you think is the imposter?
+            Kaun you guess who is the imposter?
           </p>
           
           {/* Display the final drawing */}
           <div className="mb-4">
             <p className="text-sm mb-2">The word was: <strong>{secretWord}</strong></p>
-            <div className="bg-white border rounded-md overflow-hidden" ref={containerRef}>
+            <div ref={containerRef} className="bg-white border rounded-md overflow-hidden">
               <AspectRatio ratio={1/1}>
                 <canvas
                   ref={canvasRef}
@@ -252,6 +256,11 @@ const Voting: React.FC<VotingProps> = ({
                   className="w-full h-full"
                 />
               </AspectRatio>
+            </div>
+            
+            {/* Player color legend */}
+            <div className="mt-3">
+              <PlayerColorLegend players={players} />
             </div>
           </div>
           
@@ -264,7 +273,10 @@ const Voting: React.FC<VotingProps> = ({
                 disabled={hasCurrentPlayerVoted}
                 className="flex justify-between items-center"
               >
-                <span>{player.name}</span>
+                <div className="flex items-center">
+                  <div className={`h-4 w-4 rounded-full mr-2 player-color-${player.colorIndex}`}></div>
+                  <span>{player.name}</span>
+                </div>
                 {votes[player.id] > 0 && (
                   <Badge variant="secondary" className="ml-2">
                     {votes[player.id]} {votes[player.id] === 1 ? 'vote' : 'votes'}

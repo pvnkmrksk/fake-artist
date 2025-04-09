@@ -2,13 +2,11 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { GameConfig } from '@/types/game';
 import MultiplayerModal from '@/components/MultiplayerModal';
-import { useNavigate } from 'react-router-dom';
 import Footer from '@/components/Footer';
 
 interface GameSetupProps {
@@ -27,7 +25,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
   const [isShowingMultiplayerModal, setIsShowingMultiplayerModal] = useState<boolean>(false);
   const [isTimerEnabled, setIsTimerEnabled] = useState<boolean>(initialTimerEnabled);
   const [timerDuration, setTimerDuration] = useState<number>(initialTimerDuration);
-  const navigate = useNavigate();
 
   const handleLocalGame = () => {
     onConfigSubmit({
@@ -74,19 +71,20 @@ const GameSetup: React.FC<GameSetupProps> = ({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md flex justify-center mb-6">
+      <div className="w-full max-w-md flex flex-col items-center justify-center mb-6 space-y-2">
         <img 
-          src="/lovable-uploads/501e9258-6166-4427-bced-d270d6b18ec9.png" 
-          alt="Fake Artist Logo" 
-          className="h-32 object-contain" // Increased from h-24 to h-32
+          src="/lovable-uploads/f54fa397-4d76-460c-9cef-ac9ab7fa9f8b.png" 
+          alt="Kaun Artist Logo" 
+          className="h-40 object-contain" 
         />
+        <h1 className="text-4xl font-samarkand text-primary">Kaun Artist</h1>
       </div>
 
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Fake Artist</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Kaun Artist</CardTitle>
           <CardDescription className="text-center">
-            One player doesn't know the prompt - can you guess who?
+            Kaun you guess who doesn't know the prompt?
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
